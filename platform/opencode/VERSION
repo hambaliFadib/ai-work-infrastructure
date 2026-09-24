@@ -1,0 +1,17 @@
+# OpenCode Version Contract
+#
+# Verified against installed OpenCode during Phase 4 audit.
+# This repository does NOT vendor the OpenCode engine source or binary.
+
+OPENCODE_VERSION=1.18.32
+TARGET_CLASSIFICATION=CURRENT_TARGET
+LAST_VERIFIED=2026-09-22
+
+# Compatibility notes:
+# - OpenCode 1.18.32 uses opencode.json for global config
+# - TUI settings are in tui.json (separate file)
+# - MCP configuration is inline in opencode.json under "mcp" key
+# - Agent definitions are inline under "agent" key
+# - Commands are in command/ directory
+# - Skills are in skills/ directory
+# - Plugins are in plugins/ directory

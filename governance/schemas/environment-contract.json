@@ -1,0 +1,98 @@
+{
+  "$schema": "environment-contract/v1",
+  "description": "Managed environment variable contract for AI-Work-Infra. Defines variable metadata, scope, sensitivity, and consumer relationships.",
+  "version": "1.0.0",
+  "last_verified": "2026-09-23",
+  "variables": [
+    {
+      "name": "CTX7_API_KEY",
+      "scope": "GLOBAL",
+      "sensitivity": "SECRET",
+      "required": false,
+      "consumers": ["context7 MCP"],
+      "description": "API key for Context7 MCP service. Used for documentation retrieval."
+    },
+    {
+      "name": "GITHUB_PERSONAL_ACCESS_TOKEN",
+      "scope": "GLOBAL",
+      "sensitivity": "SECRET",
+      "required": false,
+      "consumers": ["github MCP"],
+      "description": "GitHub personal access token for MCP integration."
+    },
+    {
+      "name": "GITLAB_TOKEN",
+      "scope": "GLOBAL",
+      "sensitivity": "SECRET",
+      "required": false,
+      "consumers": ["gitlab MCP"],
+      "description": "GitLab personal access token for MCP integration."
+    },
+    {
+      "name": "ORACLE_USER",
+      "scope": "PROFILE",
+      "sensitivity": "SECRET",
+      "required": false,
+      "consumers": ["oracle MCP"],
+      "description": "Oracle database username for profile-scoped connection."
+    },
+    {
+      "name": "ORACLE_PASSWORD",
+      "scope": "PROFILE",
+      "sensitivity": "SECRET",
+      "required": false,
+      "consumers": ["oracle MCP"],
+      "description": "Oracle database password for profile-scoped connection."
+    },
+    {
+      "name": "ORACLE_CONNECTION_STRING",
+      "scope": "PROFILE",
+      "sensitivity": "SECRET",
+      "required": false,
+      "consumers": ["oracle MCP"],
+      "description": "Oracle connection string (host:port/service) for profile-scoped connection."
+    },
+    {
+      "name": "ORACLE_CLIENT_DIR",
+      "scope": "PROFILE",
+      "sensitivity": "CREDENTIAL_PATH",
+      "required": false,
+      "consumers": ["oracle MCP"],
+      "description": "Path to Oracle client libraries for thick mode. Not required for thin mode."
+    },
+    {
+      "name": "ORACLE_MODE",
+      "scope": "PROFILE",
+      "sensitivity": "NON_SECRET_CONFIG",
+      "required": false,
+      "consumers": ["oracle MCP"],
+      "description": "Oracle driver mode: thin or thick."
+    },
+    {
+      "name": "ORACLE_MAX_ROWS",
+      "scope": "PROFILE",
+      "sensitivity": "NON_SECRET_CONFIG",
+      "required": false,
+      "consumers": ["oracle MCP"],
+      "description": "Maximum rows returned by oracle_read. Hard ceiling: 10000."
+    },
+    {
+      "name": "ORACLE_SCHEMA_ALLOWLIST",
+      "scope": "PROFILE",
+      "sensitivity": "NON_SECRET_CONFIG",
+      "required": false,
+      "consumers": ["oracle MCP"],
+      "description": "Comma-separated list of allowed schemas (e.g., APP,REPORTING)."
+    }
+  ],
+  "scope_definitions": {
+    "GLOBAL": "Shared across all profiles and sessions. Loaded from root .env.",
+    "PROFILE": "Job/profile-specific. Loaded from runtime/local-state/env/<profile>.env. Overrides GLOBAL for same-named variables."
+  },
+  "sensitivity_definitions": {
+    "SECRET": "Must never be printed in diagnostic output or logs.",
+    "CREDENTIAL_PATH": "Path to a credential file. Value is a filesystem path, not a secret itself.",
+    "NON_SECRET_CONFIG": "Non-sensitive configuration value. May be printed in diagnostic output."
+  },
+  "precedence": "profile > root .env > inherited Windows/process environment"
+}

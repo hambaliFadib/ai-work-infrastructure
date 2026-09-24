@@ -1,0 +1,48 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+auth/
+credentials/
+secrets/
+tokens/
+
+# Dependencies and language caches
+node_modules/
+__pycache__/
+*.pyc
+
+# Local temp/cache
+.cache/
+temp/
+tmp/
+*.bak
+*.backup
+
+# Runtime state
+runtime/local-state/
+runtime/ledger/*
+state/sessions/*
+work/*
+
+# Knowledge and evidence outputs
+knowledge/curated/*
+knowledge/sources/*
+observability/logs/*
+observability/reports/*
+evidence/
+generated-evidence/
+
+# Databases and OpenCode runtime data
+*.db
+*.sqlite
+*.sqlite3
+opencode.db
+opencode-mem/
+.opencode-mem/
+
+# Browser and tool profiles
+browser-profiles/
+profiles/
+user-data-dir/
+.playwright-mcp/

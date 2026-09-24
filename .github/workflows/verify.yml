@@ -1,0 +1,84 @@
+﻿name: verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  policy-check:
+    name: policy-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.21.0
+      - name: Check repository policy invariants
+        shell: bash
+        run: |
+          VERSION_FILE=platform/opencode/VERSION
+          test -f "$VERSION_FILE"
+          version_lines="$(grep -E '^OPENCODE_VERSION=' "$VERSION_FILE" || true)"
+          test "$(printf '%s\n' "$version_lines" | sed '/^$/d' | wc -l)" -eq 1
+          awk 'BEGIN { count=0; ok=1 } /^[[:space:]]*#/ || /^[[:space:]]*$/ { next } /^OPENCODE_VERSION=/ { count++; if ($0 !~ /^OPENCODE_VERSION=[0-9]+\.[0-9]+\.[0-9]+$/) ok=0; next } /^[A-Za-z_][A-Za-z0-9_]*=/ { next } { ok=0 } END { exit !(count == 1 && ok) }' "$VERSION_FILE"
+          test "$(grep -E '^OPENCODE_VERSION=' "$VERSION_FILE" | cut -d= -f2)" = "1.18.32"
+          test "$(find .opencode/commands -maxdepth 1 -type f | wc -l)" -eq 9
+          test "$(find .opencode/skills -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 26
+          test -f README.md
+          test -f docs/ARCHITECTURE-BLUEPRINT.md
+          ! git ls-files --error-unmatch .env >/dev/null 2>&1
+
+  runtime-tests:
+    name: runtime-tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.21.0
+      - name: Install repository-local Oracle dependencies
+        working-directory: runtime/mcp/servers/oracle
+        run: npm ci
+      - name: Phase 6 runtime tests
+        run: node runtime/tests/runtime-utils.test.js
+      - name: Phase 6 health tests
+        shell: pwsh
+        run: pwsh -ExecutionPolicy Bypass -File runtime/tests/health-runtime.test.ps1
+      - name: Oracle deterministic tests
+        run: node runtime/mcp/servers/oracle/tests/run-all.js
+      - name: MCP M01-M08 binding tests
+        run: node runtime/mcp/servers/oracle/tests/mcp-binding.test.js
+
+  security-scan:
+    name: security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check prohibited tracked patterns
+        shell: bash
+        run: |
+          ! git grep -nE 'BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|D:\\AI-Work-Infra|D:\\Sandbox AI|C:\\Users\\' -- ':!runtime/mcp/servers/oracle/node_modules/**'
+          ! git ls-files | grep -E '(^|/)(\.env|.*\.pem|.*\.key|credentials|secrets)(/|$)'
+
+  docs-contract:
+    name: docs-contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check documentation contract
+        shell: bash
+        run: |
+          test -f README.md
+          test -f docs/ARCHITECTURE-BLUEPRINT.md
+          test -f docs/WORKFLOW.md
+          test -f docs/BUILD-PLAN.md
+          test -f docs/governance/repository-collaboration.md
+          grep -Fq 'CURRENT VERIFIED ARCHITECTURE' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'Phase 9A' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'TARGET' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'Phase 9B' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'Phase 9C' docs/ARCHITECTURE-BLUEPRINT.md

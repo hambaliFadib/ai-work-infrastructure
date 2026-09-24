@@ -1,0 +1,34 @@
+﻿{
+    "entries":  [
+                    {
+                        "runtime_implementation":  null,
+                        "name":  "core-dep",
+                        "external_dependency":  "none",
+                        "criticality":  "CORE",
+                        "health_check":  "static",
+                        "enabled_by_default":  true,
+                        "ownership":  "REPOSITORY_OWNED",
+                        "credential_contract":  "none"
+                    },
+                    {
+                        "runtime_implementation":  null,
+                        "name":  "opt-dep",
+                        "external_dependency":  "none",
+                        "criticality":  "OPTIONAL",
+                        "health_check":  "static",
+                        "enabled_by_default":  true,
+                        "ownership":  "EXTERNAL_REMOTE",
+                        "credential_contract":  "none"
+                    },
+                    {
+                        "runtime_implementation":  null,
+                        "name":  "planned-dep",
+                        "external_dependency":  "none",
+                        "criticality":  "PLANNED",
+                        "health_check":  "none",
+                        "enabled_by_default":  false,
+                        "ownership":  "REPOSITORY_OWNED",
+                        "credential_contract":  "none"
+                    }
+                ]
+}

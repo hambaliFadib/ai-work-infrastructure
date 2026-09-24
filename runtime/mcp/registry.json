@@ -1,0 +1,77 @@
+{
+  "$schema": "mcp-registry/v1",
+  "description": "Repository-side registry for MCP servers. Infrastructure inventory and health/bootstrap metadata.",
+  "version": "1.0.1",
+  "entries": [
+    {
+      "name": "chrome-devtools",
+      "ownership": "EXTERNAL_LOCAL",
+      "criticality": "OPTIONAL",
+      "enabled_by_default": true,
+      "external_dependency": "npx chrome-devtools-mcp@latest",
+      "credential_contract": "none",
+      "health_check": "static: check npx availability",
+      "runtime_implementation": null
+    },
+    {
+      "name": "context7",
+      "ownership": "EXTERNAL_REMOTE",
+      "criticality": "OPTIONAL",
+      "enabled_by_default": true,
+      "external_dependency": "network + CTX7_API_KEY",
+      "credential_contract": "CTX7_API_KEY in environment",
+      "health_check": "static: check env var presence",
+      "runtime_implementation": null
+    },
+    {
+      "name": "github",
+      "ownership": "EXTERNAL_REMOTE",
+      "criticality": "OPTIONAL",
+      "enabled_by_default": true,
+      "external_dependency": "network + GITHUB_PERSONAL_ACCESS_TOKEN",
+      "credential_contract": "GITHUB_PERSONAL_ACCESS_TOKEN in environment",
+      "health_check": "static: check env var presence",
+      "runtime_implementation": null
+    },
+    {
+      "name": "gitlab",
+      "ownership": "EXTERNAL_LOCAL",
+      "criticality": "OPTIONAL",
+      "enabled_by_default": false,
+      "external_dependency": "npx gitlab-mcp + GITLAB_TOKEN",
+      "credential_contract": "GITLAB_TOKEN in environment",
+      "health_check": "static: check env var presence",
+      "runtime_implementation": null
+    },
+    {
+      "name": "neon",
+      "ownership": "EXTERNAL_REMOTE",
+      "criticality": "OPTIONAL",
+      "enabled_by_default": true,
+      "external_dependency": "npx mcp-remote",
+      "credential_contract": "none",
+      "health_check": "static: check npx availability",
+      "runtime_implementation": null
+    },
+    {
+      "name": "playwright",
+      "ownership": "EXTERNAL_LOCAL",
+      "criticality": "OPTIONAL",
+      "enabled_by_default": true,
+      "external_dependency": "npx @playwright/mcp",
+      "credential_contract": "none",
+      "health_check": "static: check npx availability",
+      "runtime_implementation": null
+    },
+    {
+      "name": "oracle-readonly",
+      "ownership": "REPOSITORY_OWNED",
+      "criticality": "OPTIONAL",
+      "enabled_by_default": false,
+      "external_dependency": "node-oracledb@6.7.0 (installed locally)",
+      "credential_contract": "ORACLE_USER, ORACLE_PASSWORD, ORACLE_CONNECTION_STRING (PROFILE-scoped)",
+      "health_check": "static + live connectivity probe",
+      "runtime_implementation": "verified — driver provisioned, MCP binding ready, live write disabled"
+    }
+  ]
+}

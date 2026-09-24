@@ -1,0 +1,13 @@
+{
+  "$schema": "result-envelope/v1",
+  "description": "Generic runtime result envelope for evidence and audit trails.",
+  "version": "1.0.0",
+  "required_fields": ["ok", "operation", "timestamp", "status"],
+  "optional_fields": ["target", "dry_run", "run_id", "profile", "environment", "summary", "warnings", "errors", "evidence", "rollback"],
+  "status_values": ["ok", "error", "partial", "skipped"],
+  "rollback_contract": {
+    "available": "boolean — whether rollback is possible",
+    "reference": "string — path or identifier for rollback artifact",
+    "instructions": "string — human-readable rollback steps"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "execution-context/v1",
+  "description": "Generic execution context for runtime operations.",
+  "version": "1.0.0",
+  "fields": {
+    "run_id": "string — unique operation identifier (UUID)",
+    "operation": "string — operation name/type",
+    "timestamp": "string — ISO-8601 timestamp",
+    "profile": "string — job/profile name (optional)",
+    "environment": "string — target environment (optional)",
+    "dry_run": "boolean — whether this is a dry run",
+    "correlation_id": "string — optional correlation identifier"
+  },
+  "forbidden_fields": ["password", "token", "secret", "apiKey", "authorization", "credential", "raw_query", "connection_string"],
+  "profile_name_rules": "Must match ^[A-Za-z0-9][A-Za-z0-9._-]*$. No path separators, no absolute paths."
+}

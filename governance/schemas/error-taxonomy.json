@@ -1,0 +1,22 @@
+{
+  "$schema": "error-taxonomy/v1",
+  "description": "Generic runtime error classification for fail-safe diagnostics.",
+  "version": "1.0.0",
+  "categories": {
+    "VALIDATION_ERROR": "Input failed schema or format validation",
+    "CONFIG_ERROR": "Missing or invalid configuration",
+    "AUTH_REQUIRED": "Authentication or authorization needed",
+    "DEPENDENCY_UNAVAILABLE": "Required external dependency not available",
+    "PERMISSION_DENIED": "Insufficient permissions for operation",
+    "POLICY_BLOCKED": "Operation blocked by governance policy",
+    "EXECUTION_ERROR": "Operation failed during execution",
+    "TIMEOUT": "Operation exceeded time limit",
+    "INTERNAL_ERROR": "Unexpected internal failure"
+  },
+  "rules": [
+    "Never expose secret values in error messages",
+    "Use category codes, not ad-hoc strings",
+    "Each error must be distinguishable without credential context",
+    "Fail closed for unknown error categories"
+  ]
+}

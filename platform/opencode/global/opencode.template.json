@@ -1,0 +1,131 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "~/.config/opencode/AGENTS.md"
+  ],
+  "agent": {
+    "build": {
+      "color": "#38b2c9"
+    },
+    "engineer": {
+      "color": "#48bb78"
+    },
+    "plan": {
+      "color": "#9f7aea"
+    }
+  },
+  "experimental": {
+    "mcp_timeout": 600000
+  },
+  "mcp": {
+    "chrome-devtools": {
+      "command": ["npx", "-y", "chrome-devtools-mcp@latest"],
+      "enabled": true,
+      "type": "local"
+    },
+    "context7": {
+      "enabled": true,
+      "headers": {
+        "Authorization": "{env:CTX7_API_KEY}"
+      },
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "github": {
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+      },
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "gitlab": {
+      "command": ["npx", "-y", "gitlab-mcp@1.6.1"],
+      "enabled": false,
+      "environment": {
+        "GITLAB_API_URL": "https://gitlab.com/api/v4",
+        "GITLAB_PERMISSION_MODE": "readonly",
+        "GITLAB_PERSONAL_ACCESS_TOKEN": "{env:GITLAB_TOKEN}"
+      },
+      "type": "local"
+    },
+    "neon": {
+      "command": ["npx", "-y", "mcp-remote", "https://mcp.neon.tech/sse"],
+      "enabled": true,
+      "type": "local"
+    },
+    "playwright": {
+      "command": ["npx", "-y", "@playwright/mcp"],
+      "enabled": true,
+      "type": "local"
+    }
+  },
+  "model": "opencode-go/mimo-v2.5",
+  "permission": {
+    "skill": {
+      "*": "deny"
+    },
+    "bash": {
+      "*": "ask",
+      "*--force*": "deny",
+      "Get-ChildItem *": "allow",
+      "Get-CimInstance *": "allow",
+      "Get-Command *": "allow",
+      "Get-ComputerInfo*": "allow",
+      "Get-Content *": "allow",
+      "Get-Item *": "allow",
+      "Get-NetTCPConnection *": "allow",
+      "Get-Process *": "allow",
+      "Get-Service *": "allow",
+      "Get-Volume *": "allow",
+      "Remove-Item *": "deny",
+      "Resolve-DnsName *": "allow",
+      "Select-String *": "allow",
+      "Stop-Computer*": "deny",
+      "Test-NetConnection *": "allow",
+      "Test-Path *": "allow",
+      "del *": "deny",
+      "dir *": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git push*": "deny",
+      "git reset --hard*": "deny",
+      "git status*": "allow",
+      "ls *": "allow",
+      "netstat *": "allow",
+      "rg *": "allow",
+      "rm *": "deny",
+      "shutdown*": "deny",
+      "where.exe *": "allow"
+    },
+    "edit": {
+      "*": "ask",
+      "C:\\Windows\\**": "deny"
+    },
+    "external_directory": {
+      "*": "ask",
+      "C:\\Windows\\**": "deny"
+    },
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    },
+    "webfetch": "allow",
+    "websearch": "allow"
+  },
+  "plugin": [
+    "opencode-mem"
+  ],
+  "provider": {
+    "opencode-go": {
+      "name": "OpenCode Go",
+      "models": {
+        "mimo-v2.5": {
+          "name": "MiMo V2.5"
+        }
+      }
+    }
+  }
+}
