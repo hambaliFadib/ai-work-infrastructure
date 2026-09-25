@@ -11,6 +11,27 @@ Remote issue workflow = VERIFIED
 Branch workflow = VERIFIED
 PR workflow = VERIFIED
 
+## Main Protection Ruleset
+
+```text
+main-protection = ACTIVE
+PR required = yes
+required approvals = 0
+conversation resolution = required
+branch up-to-date = required
+linear history = required
+force pushes = blocked
+main deletion = blocked
+
+required checks:
+- policy-check
+- runtime-tests
+- security-scan
+- docs-contract
+
+merge method = squash only
+```
+
 ## Rules
 
 ```text
