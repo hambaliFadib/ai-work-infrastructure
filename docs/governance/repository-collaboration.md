@@ -1,13 +1,15 @@
 ﻿# Repository Collaboration Governance
 
-Status: IMPLEMENTED for local collaboration files. GitHub-hosted configuration remains TARGET.
+Status: VERIFIED. All collaboration workflows are active and enforced.
 
 Issue templates = IMPLEMENTED
 PR template = IMPLEMENTED
-CI baseline = IMPLEMENTED
+CI baseline = ACTIVE (4 required checks)
 GitHub remote activation = ACTIVE / VERIFIED
-GitHub ruleset = TARGET
-Remote issue workflow = TARGET
+GitHub ruleset = ACTIVE (main-protection)
+Remote issue workflow = VERIFIED
+Branch workflow = VERIFIED
+PR workflow = VERIFIED
 
 ## Rules
 
@@ -36,4 +38,4 @@ Every issue declares documentation impact: `NONE`, `UPDATE_EXISTING`, or `NEW_DO
 
 ## Not yet activated
 
-GitHub rulesets, remote issue workflow, labels, milestones, and hosted configuration are TARGET. Public v1 release and clean-clone verification are TARGET.
+Labels, milestones, and hosted configuration are TARGET. Public v1 release and clean-clone verification are TARGET.
