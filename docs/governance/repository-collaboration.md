@@ -5,7 +5,7 @@ Status: IMPLEMENTED for local collaboration files. GitHub-hosted configuration r
 Issue templates = IMPLEMENTED
 PR template = IMPLEMENTED
 CI baseline = IMPLEMENTED
-GitHub remote activation = TARGET
+GitHub remote activation = ACTIVE / VERIFIED
 GitHub ruleset = TARGET
 Remote issue workflow = TARGET
 
@@ -36,4 +36,4 @@ Every issue declares documentation impact: `NONE`, `UPDATE_EXISTING`, or `NEW_DO
 
 ## Not yet activated
 
-No remote currently exists. GitHub rulesets, remote issue workflow, labels, milestones, and hosted configuration are TARGET. Public v1 release and clean-clone verification are TARGET.
+GitHub rulesets, remote issue workflow, labels, milestones, and hosted configuration are TARGET. Public v1 release and clean-clone verification are TARGET.

@@ -20,4 +20,4 @@ Changes require tests, security evidence, and documentation impact review. Runti
 
 ## Current activation state
 
-RCB-01 is complete. RCB-02 is current. RCB-03 collaboration files, RCB-04 baseline commit, RCB-05 remote activation, RCB-06 branch rules, and RCB-07 project metadata are pending. Phase 9A, 9B, and 9C remain TARGET.
+RCB-01 is complete. RCB-02 through RCB-05 are verified. RCB-06 branch rules and RCB-07 project metadata are pending. Phase 9A, 9B, and 9C remain TARGET.
