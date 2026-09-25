@@ -20,6 +20,8 @@ RCB-02  VERIFIED
 RCB-03  VERIFIED
 RCB-04  VERIFIED
 RCB-05  VERIFIED
+RCB-06A CI parity root cause identified
+RCB-06B CI portability remediation in progress
 RCB-06  PENDING
 RCB-07  PENDING
 ```

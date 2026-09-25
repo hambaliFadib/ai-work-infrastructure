@@ -30,10 +30,12 @@ const ENV_CONFIG = {
 };
 
 function mkProfile(name, vars) {
+  fs.mkdirSync(PDIR, { recursive: true });
   fs.writeFileSync(path.join(PDIR, name + '.env'), Object.entries(vars).map(([k,v]) => `${k}=${v}`).join('\n'), 'utf8');
 }
 
 function runPs(script) {
+  fs.mkdirSync(PDIR, { recursive: true });
   const f = path.join(PDIR, '_test_' + Date.now() + '.ps1');
   fs.writeFileSync(f, script, 'utf8');
   try {
