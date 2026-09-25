@@ -57,6 +57,54 @@ Use `feat/<issue>-<slug>`, `fix/<issue>-<slug>`, `test/<issue>-<slug>`, `docs/<i
 
 Every issue declares documentation impact: `NONE`, `UPDATE_EXISTING`, or `NEW_DOCUMENT`. Fundamental architecture changes require an ADR under `docs/decisions/`.
 
+## Phase 9 Issue Governance
+
+```text
+19-label taxonomy = ACTIVE
+3 Phase 9 milestones = ACTIVE
+issue contract = ACTIVE
+dependency/status model = ACTIVE
+Phase 9 backlog = ACTIVE
+```
+
+Status semantics:
+
+```text
+status:ready       safe to start
+status:blocked     dependency or gate unresolved
+status:integration waiting for cross-cutting integration/closure
+```
+
+GitHub issues remain authoritative backlog. Documentation reflects verified state only.
+
+### Phase 9A — Context Hydration
+
+```text
+epic:     #7  status:ready
+9A-01:    #8  status:ready     (governance contract)
+9A-02:    #9  status:blocked   (objective parser)
+9A-03:    #10 status:blocked   (ranking policy)
+9A-04:    #11 status:blocked   (retrieval adapters)
+9A-05:    #12 status:blocked   (budget + ContextPackage)
+9A-06:    #13 status:blocked   (skill resolver)
+9A-07:    #14 status:blocked   (integration)
+9A-08:    #15 status:blocked   (acceptance 37/37)
+```
+
+### Phase 9B — Job Isolation + Parallelism
+
+```text
+epic:     #16 status:blocked (blocked until Phase 9A VERIFIED)
+children: 0
+```
+
+### Phase 9C — Session Recovery
+
+```text
+epic:     #17 status:blocked (blocked until Phase 9B VERIFIED)
+children: 0
+```
+
 ## Not yet activated
 
 Labels, milestones, and hosted configuration are TARGET. Public v1 release and clean-clone verification are TARGET.
