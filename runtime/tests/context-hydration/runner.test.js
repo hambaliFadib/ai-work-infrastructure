@@ -2,22 +2,26 @@
  * Context Hydration runner infrastructure test.
  *
  * Tests the runner itself — NOT Context Hydration business behavior.
- * R01-R11: registry, required/optional behavior, path safety, uniqueness.
+ * R01-R13: registry, required/optional behavior, path safety, uniqueness,
+ * per-invocation fixture isolation, and concurrent-process safety.
  *
  * No network. No DB. No env/profile access.
- * Uses temporary fixtures outside tracked repository content.
+ * Fixtures are per-invocation unique inside the context-hydration directory
+ * and are removed only by the invocation that created them.
  */
 
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
+const crypto = require('crypto');
+const { spawn } = require('child_process');
 
 const { SUITE_REGISTRY, runSuites, runSuite, resolveSuitePath } = require('./run-all.js');
 
 // Fixtures are created inside the context-hydration directory to satisfy path safety checks.
 const FIXTURES_DIR = __dirname;
-const FIXTURE_PASS = '__fixture_passing_test__.js';
-const FIXTURE_FAIL = '__fixture_failing_test__.js';
+const WORKER_FLAG = '--fixture-worker';
+
 let passed = 0;
 let failed = 0;
 
@@ -32,12 +36,79 @@ function test(label, fn) {
   }
 }
 
-// Clean up fixture files after tests
-function cleanupFixtures() {
-  for (const f of [FIXTURE_PASS, FIXTURE_FAIL]) {
-    const p = path.join(FIXTURES_DIR, f);
-    if (fs.existsSync(p)) fs.unlinkSync(p);
+/**
+ * Per-invocation fixture namespace.
+ * process.pid + crypto.randomUUID() guarantee no two concurrent invocations
+ * in the same checkout share fixture paths (PR #23 review comment 4111937898).
+ */
+function createInvocationNamespace() {
+  const token = `${process.pid}_${crypto.randomUUID()}`;
+  return {
+    token,
+    pass: `__runner_fixture_${token}_pass.js`,
+    fail: `__runner_fixture_${token}_fail.js`,
+  };
+}
+
+/**
+ * Resolve a fixture filename, refusing anything outside the fixture directory.
+ */
+function fixturePath(name) {
+  const resolved = path.resolve(FIXTURES_DIR, name);
+  const normalizedDir = path.resolve(FIXTURES_DIR) + path.sep;
+  if (!resolved.startsWith(normalizedDir)) {
+    throw new Error(`Fixture path escapes context-hydration directory: ${name}`);
   }
+  return resolved;
+}
+
+/**
+ * Create an owned fixture file. Returns its absolute path for exact cleanup.
+ */
+function writeOwnedFixture(name, content) {
+  const ownedPath = fixturePath(name);
+  fs.writeFileSync(ownedPath, content, 'utf8');
+  return ownedPath;
+}
+
+/**
+ * Remove exactly the given owned fixture paths.
+ * Never scans or globs — an invocation may delete only what it created.
+ */
+function removeOwnedFixtures(ownedPaths) {
+  for (const ownedPath of ownedPaths) {
+    if (fs.existsSync(ownedPath)) fs.unlinkSync(ownedPath);
+  }
+}
+
+/**
+ * Internal worker mode used by R13.
+ * Creates one unique passing fixture, runs it through runSuite(), asserts PASS,
+ * removes only its own fixture, and reports the fixture name on stdout.
+ * Never runs the R01+ suite recursively.
+ */
+function runFixtureWorker() {
+  const ownedPaths = [];
+  let ok = false;
+  try {
+    const namespace = createInvocationNamespace();
+    ownedPaths.push(writeOwnedFixture(namespace.pass, 'console.log("WORKER PASS"); process.exit(0);'));
+    const result = runSuite({ name: 'concurrent-fixture', file: namespace.pass, required: false });
+    ok = result.status === 'PASS';
+    if (ok) {
+      console.log(`fixture-worker PASS ${namespace.pass}`);
+    } else {
+      console.error(`fixture-worker FAIL expected PASS got ${result.status}`);
+    }
+  } finally {
+    removeOwnedFixtures(ownedPaths);
+  }
+  return ok;
+}
+
+// Worker mode must run before any R01+ test executes — never recursively.
+if (process.argv.includes(WORKER_FLAG)) {
+  process.exit(runFixtureWorker() ? 0 : 1);
 }
 
 // R01: registry contains exactly 7 known suites
@@ -85,34 +156,43 @@ test('R06 required missing suite -> FAIL', () => {
 
 // R07: present passing optional suite -> PASS
 test('R07 present passing optional suite -> PASS', () => {
-  // Create a passing test fixture inside context-hydration dir
-  const fixturePath = path.join(FIXTURES_DIR, FIXTURE_PASS);
-  fs.writeFileSync(fixturePath, 'console.log("PASS"); process.exit(0);', 'utf8');
-  const result = runSuite({ name: 'passing-fixture', file: FIXTURE_PASS, required: false });
-  assert.strictEqual(result.status, 'PASS', `Expected PASS, got ${result.status}`);
-  fs.unlinkSync(fixturePath);
+  // Create a per-invocation passing test fixture inside context-hydration dir
+  const namespace = createInvocationNamespace();
+  const ownedPath = writeOwnedFixture(namespace.pass, 'console.log("PASS"); process.exit(0);');
+  try {
+    const result = runSuite({ name: 'passing-fixture', file: namespace.pass, required: false });
+    assert.strictEqual(result.status, 'PASS', `Expected PASS, got ${result.status}`);
+  } finally {
+    removeOwnedFixtures([ownedPath]);
+  }
 });
 
 // R08: present failing optional suite -> FAIL
 test('R08 present failing optional suite -> FAIL', () => {
-  // Create a failing test fixture inside context-hydration dir
-  const fixturePath = path.join(FIXTURES_DIR, FIXTURE_FAIL);
-  fs.writeFileSync(fixturePath, 'process.exit(1);', 'utf8');
-  const result = runSuite({ name: 'failing-fixture', file: FIXTURE_FAIL, required: false });
-  assert.strictEqual(result.status, 'FAIL', `Expected FAIL, got ${result.status}`);
-  fs.unlinkSync(fixturePath);
+  // Create a per-invocation failing test fixture inside context-hydration dir
+  const namespace = createInvocationNamespace();
+  const ownedPath = writeOwnedFixture(namespace.fail, 'process.exit(1);');
+  try {
+    const result = runSuite({ name: 'failing-fixture', file: namespace.fail, required: false });
+    assert.strictEqual(result.status, 'FAIL', `Expected FAIL, got ${result.status}`);
+  } finally {
+    removeOwnedFixtures([ownedPath]);
+  }
 });
 
 // R09: arbitrary unregistered file is never executed
 test('R09 arbitrary unregistered file is never executed', () => {
-  // Create an arbitrary file inside context-hydration dir
-  const arbitraryName = '__arbitrary_unregistered__.js';
-  const fixturePath = path.join(FIXTURES_DIR, arbitraryName);
-  fs.writeFileSync(fixturePath, 'console.log("ARBITRARY EXECUTED"); process.exit(0);', 'utf8');
-  // Verify it's not in the registry
-  const found = SUITE_REGISTRY.find(s => s.file === arbitraryName);
-  assert.ok(!found, 'Arbitrary file should not be in registry');
-  fs.unlinkSync(fixturePath);
+  // Create a per-invocation arbitrary file inside context-hydration dir
+  const namespace = createInvocationNamespace();
+  const arbitraryName = `__runner_fixture_${namespace.token}_arbitrary.js`;
+  const ownedPath = writeOwnedFixture(arbitraryName, 'console.log("ARBITRARY EXECUTED"); process.exit(0);');
+  try {
+    // Verify it's not in the registry
+    const found = SUITE_REGISTRY.find(s => s.file === arbitraryName);
+    assert.ok(!found, 'Arbitrary file should not be in registry');
+  } finally {
+    removeOwnedFixtures([ownedPath]);
+  }
 });
 
 // R10: suite registry filenames are unique
@@ -135,10 +215,91 @@ test('R11 registry paths cannot escape context-hydration test directory', () => 
   }
 });
 
-// Cleanup
-cleanupFixtures();
+// R12: independent invocations generate distinct fixture names
+test('R12 independent invocations generate distinct fixture names', () => {
+  const first = createInvocationNamespace();
+  const second = createInvocationNamespace();
+  assert.notStrictEqual(first.token, second.token, 'invocation tokens must be unique');
+  assert.notStrictEqual(first.pass, second.pass, 'pass fixture names must differ between invocations');
+  assert.notStrictEqual(first.fail, second.fail, 'fail fixture names must differ between invocations');
+  const normalizedDir = path.resolve(FIXTURES_DIR) + path.sep;
+  for (const name of [first.pass, first.fail, second.pass, second.fail]) {
+    assert.ok(!name.includes('..'), `${name} must not contain path traversal`);
+    assert.ok(!path.isAbsolute(name), `${name} must be a bare filename`);
+    const resolved = fixturePath(name);
+    assert.ok(resolved.startsWith(normalizedDir), `${name} must stay inside ${FIXTURES_DIR}`);
+  }
+});
 
-// Summary
-console.log(`\n=== Runner Infrastructure Test Summary ===`);
-console.log(`Passed: ${passed}, Failed: ${failed}`);
-process.exit(failed > 0 ? 1 : 0);
+// Async tests run after the synchronous R01-R12 block.
+const asyncTests = [];
+function testAsync(label, fn) {
+  asyncTests.push({ label, fn });
+}
+
+// R13: concurrent processes cannot collide on fixture names
+// Guards the P1 from PR #23 review comment 4111937898.
+testAsync('R13 concurrent fixture workers pass without collision', async () => {
+  const WORKER_COUNT = 8;
+  const workerScript = path.join(FIXTURES_DIR, 'runner.test.js');
+  const runs = [];
+  for (let i = 0; i < WORKER_COUNT; i++) {
+    runs.push(new Promise((resolve) => {
+      const child = spawn(process.execPath, [workerScript, WORKER_FLAG], {
+        cwd: FIXTURES_DIR,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => { stdout += chunk; });
+      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      child.on('error', (err) => resolve({ code: -1, stdout, stderr: `${stderr}${err.message}` }));
+      child.on('close', (code) => resolve({ code, stdout, stderr }));
+    }));
+  }
+
+  const results = await Promise.all(runs);
+  const failures = results.filter((r) => r.code !== 0);
+  const firstFailure = failures.length ? (failures[0].stderr || failures[0].stdout || `exit ${failures[0].code}`) : '';
+  assert.strictEqual(
+    failures.length,
+    0,
+    `${WORKER_COUNT - failures.length}/${WORKER_COUNT} workers exited 0; first failure: ${firstFailure}`
+  );
+
+  const reportedNames = results.map((r) => {
+    const match = r.stdout.match(/fixture-worker PASS (\S+\.js)/);
+    return match ? match[1] : null;
+  });
+  const missing = reportedNames.filter((name) => !name);
+  assert.strictEqual(missing.length, 0, `${missing.length}/${WORKER_COUNT} workers did not report a fixture name`);
+  assert.strictEqual(new Set(reportedNames).size, WORKER_COUNT, 'worker fixture names must be unique across processes');
+
+  // No owned worker fixture may remain after the workers exited.
+  for (const name of reportedNames) {
+    assert.ok(!fs.existsSync(fixturePath(name)), `owned worker fixture left behind: ${name}`);
+  }
+});
+
+async function main() {
+  for (const { label, fn } of asyncTests) {
+    try {
+      await fn();
+      passed++;
+      console.log(`${label}: PASS`);
+    } catch (e) {
+      failed++;
+      console.log(`${label}: FAIL — ${e.message}`);
+    }
+  }
+
+  // Summary
+  console.log(`\n=== Runner Infrastructure Test Summary ===`);
+  console.log(`Passed: ${passed}, Failed: ${failed}`);
+  process.exit(failed > 0 ? 1 : 0);
+}
+
+main().catch((e) => {
+  console.error(`FATAL: ${e.message}`);
+  process.exit(1);
+});
