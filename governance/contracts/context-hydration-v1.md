@@ -170,18 +170,24 @@ Range: 0.0–1.0. Does NOT require network, LLM, or embedding provider.
 
 ### 8.3 Scope Specificity v1
 
-Foreign-job candidate (candidate.job_id != active job_id) → HARD REJECT BEFORE SCORING.
+Foreign-job rejection applies only when a candidate actually carries job ownership:
 
-For eligible candidates:
+```
+candidate.job_id is present/non-null AND candidate.job_id != active_job_id
+→ HARD REJECT BEFORE SCORING
+```
 
-| Condition | Score |
-|---|---|
-| same active session | 1.00 |
-| same active job | 0.75 |
-| global scope | 0.50 |
-| otherwise | 0.00 |
+A valid global candidate (candidate.scope = global, candidate.job_id absent/null) is NOT a foreign-job candidate. It remains eligible with scope_specificity = 0.50.
 
-Same session outranks same job. Same job outranks global. Range: 0.0–1.0.
+Evaluation order:
+
+1. if job_id present and != active_job_id → HARD REJECT
+2. same active session → 1.00
+3. same active job → 0.75
+4. global scope + no job_id → 0.50
+5. otherwise → 0.00
+
+Same-session candidate must not escape foreign-job rejection if it carries a conflicting job_id.
 
 ### 8.4 Authority Baseline
 
@@ -357,7 +363,11 @@ Do NOT persist secrets.
 
 - Redacted
 - Local-only
-- Expiration: metadata is eligible for cleanup when cleanup_current_time >= expires_at
+- Expiry: `expires_at = omitted_at + 2,592,000 seconds (30 days)`
+- At `retention_current_time >= expires_at` the record becomes EXPIRED
+- Expired records MUST NOT be returned, used by hydration, or considered active audit metadata
+- Before any metadata read/list operation completes, expired records MUST be removed or irreversibly invalidated
+- On storage/service initialization, expired records MUST be purged/inactivated before serving omission metadata
 
 ### 12.4 Time Anchor
 

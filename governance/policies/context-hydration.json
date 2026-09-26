@@ -73,6 +73,11 @@
     },
     "scope_specificity": {
       "foreign_job_reject": true,
+      "foreign_job_requires_job_id_present": true,
+      "foreign_job_condition": "candidate.job_id != null AND candidate.job_id != active_job_id",
+      "global_scope_job_id": "absent_or_null",
+      "global_candidate_foreign_job_exempt": true,
+      "evaluation_order": ["foreign_job_reject", "same_active_session", "same_active_job", "global_scope", "otherwise"],
       "mapping": {
         "same_active_session": 1.00,
         "same_active_job": 0.75,
@@ -221,7 +226,12 @@
     "omitted_at_source": "hydration_started_at",
     "retention_seconds": 2592000,
     "expiry_formula": "omitted_at + 2592000 seconds (30 days)",
-    "cleanup_eligibility": "cleanup_current_time >= expires_at",
+    "expiry_boundary": "retention_current_time >= expires_at",
+    "read_after_expiry": "forbidden",
+    "use_after_expiry": "forbidden",
+    "cleanup_required": true,
+    "cleanup_before_post_expiry_read": true,
+    "cleanup_on_store_initialization": true,
     "redacted": true,
     "local_only": true
   },

@@ -72,7 +72,7 @@ Explicit objective outranks inferred objective. Ambiguity does not invent entiti
 
 ## 5. Eligibility
 
-Hard reject: foreign job knowledge.
+Foreign-job rejection: candidate.job_id present AND != active_job_id → HARD REJECT. Global candidates (scope=global, no job_id) are eligible.
 
 | Source | Eligibility |
 |---|---|
@@ -91,7 +91,7 @@ Latest valid checkpoint is mandatory and bypasses ranking.
 
 Weights: semantic 0.50, scope 0.25, authority 0.20, recency 0.05. Sum = 1.00.
 
-Authority: curated 1.00, reviewed session fact 0.90, historical checkpoint 0.80, semantic memory 0.50.
+Term normalization: NFKC, lowercase, trim, collapse whitespace, deduplicate. Semantic relevance: Jaccard similarity of normalized term sets. Scope specificity: same_session=1.00, same_job=0.75, global=0.50. Authority: curated 1.00, reviewed session fact 0.90, historical checkpoint 0.80, semantic memory 0.50. Recency: hydration_started_at anchor, buckets (1d=1.00, 7d=0.75, 30d=0.50, 90d=0.25). Total score: quantize6 of weighted sum.
 
 Tie-break: total_score DESC, scope_specificity DESC, authority DESC, updated_at DESC, source_id ASC.
 
@@ -101,7 +101,7 @@ Tie-break: total_score DESC, scope_specificity DESC, authority DESC, updated_at 
 
 ## 7. Budget
 
-Retrieved knowledge <= 20% of available context.
+Available context = context_window - response_headroom - execution_reserve - active_conversation - mandatory_context. Retrieval budget = floor(available_context * 0.20). tokenizer_id required.
 
 Protected set (never dropped): objective, job/profile identity, safety constraints, approval state, latest checkpoint, mandatory project instructions.
 
@@ -113,9 +113,11 @@ Overflow: CONTEXT_BUDGET_EXCEEDED.
 
 ## 8. ContextPackage
 
-Envelope fields: hydration_run_id, policy_id, policy_version, objective, job_id, session_id, mandatory[], retrieved[], omitted[], budget.
+Envelope fields: hydration_run_id, policy_id, policy_version, hydration_started_at, objective, job_id, session_id, mandatory[], retrieved[], omitted[], budget.
 
 Each retrieved record preserves: source_id, source_type, scope, score, rank, reason, provenance.
+
+Budget audit: tokenizer_id, context_window_tokens, response_headroom_tokens, execution_reserve_tokens, active_conversation_tokens, mandatory_context_tokens, available_context_tokens, retrieval_budget_tokens, retrieved_tokens_used.
 
 No secrets persisted.
 
@@ -127,9 +129,9 @@ No secrets persisted.
 
 Full content persistence: 0.
 
-Allowed metadata: source_id, source_type, scope, score, rank, omission_reason, estimated_tokens, hydration_run_id.
+Allowed metadata: source_id, source_type, scope, score, rank, omission_reason, estimated_tokens, hydration_run_id, omitted_at, expires_at.
 
-Metadata: redacted, local-only, 30-day retention.
+Metadata: redacted, local-only, 30-day expiry. Expired records MUST NOT be returned or used. Cleanup enforced before post-expiry reads and on store initialization.
 
 **Ownership:** #12 (9A-05)
 
@@ -151,7 +153,7 @@ Skills cannot override runtime policy, permissions, or security constraints.
 
 ## 11. Determinism (H17)
 
-Identical candidate set + StructuredObjective + job/session scope + policy version must produce identical ordering.
+Identical candidate records + normalized scoring inputs + StructuredObjective + job/session scope + hydration_started_at + policy version must produce identical ordering.
 
 ---
 

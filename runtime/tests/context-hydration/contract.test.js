@@ -314,16 +314,19 @@ test('C35 exact Jaccard semantic relevance contract', () => {
   assert.strictEqual(sr.requires_network, false);
 });
 
-// C36: exact scope-specificity mapping + foreign-job reject
-test('C36 exact scope-specificity mapping + foreign-job reject', () => {
+// C36: exact scope-specificity mapping + foreign-job reject + evaluation order
+test('C36 exact scope-specificity mapping + foreign-job reject + evaluation order', () => {
   const ss = policy.ranking.scope_specificity;
   assert.ok(ss, 'scope_specificity must exist');
   assert.strictEqual(ss.foreign_job_reject, true);
+  assert.strictEqual(ss.foreign_job_requires_job_id_present, true);
+  assert.strictEqual(ss.global_candidate_foreign_job_exempt, true);
   assert.strictEqual(ss.mapping.same_active_session, 1.00);
   assert.strictEqual(ss.mapping.same_active_job, 0.75);
   assert.strictEqual(ss.mapping.global_scope, 0.50);
   assert.strictEqual(ss.mapping.otherwise, 0.00);
   assert.deepStrictEqual(ss.range, [0.0, 1.0]);
+  assert.deepStrictEqual(ss.evaluation_order, ['foreign_job_reject', 'same_active_session', 'same_active_job', 'global_scope', 'otherwise']);
 });
 
 // C37: exact recency anchor/buckets
@@ -365,14 +368,14 @@ test('C39 exact budget inputs/denominator/reservation order/formula', () => {
   assert.ok(b.reservation_order, 'reservation_order must exist');
   assert.strictEqual(b.reservation_order.length, 7);
   assert.ok(b.formulas, 'formulas must exist');
-  assert.ok(b.formulas.usable_before_mandatory.includes('context_window_tokens'));
-  assert.ok(b.formulas.available_context_tokens.includes('usable_before_mandatory'));
-  assert.ok(b.formulas.retrieval_budget_tokens.includes('0.20'));
+  assert.strictEqual(b.formulas.usable_before_mandatory, 'context_window_tokens - response_headroom_tokens - execution_reserve_tokens - active_conversation_tokens');
+  assert.strictEqual(b.formulas.available_context_tokens, 'usable_before_mandatory - mandatory_context_tokens');
+  assert.strictEqual(b.formulas.retrieval_budget_tokens, 'floor(available_context_tokens * 0.20)');
   assert.strictEqual(b.retrieved_max_fraction, 0.20);
 });
 
-// C40: exact omission timestamp + 30-day expiry semantics
-test('C40 exact omission timestamp + 30-day expiry semantics', () => {
+// C40: exact omission timestamp + 30-day expiry semantics + enforcement
+test('C40 exact omission timestamp + 30-day expiry semantics + enforcement', () => {
   const o = policy.omission;
   assert.ok(o, 'omission must exist');
   assert.strictEqual(o.timestamp_format, 'RFC3339 UTC');
@@ -382,6 +385,12 @@ test('C40 exact omission timestamp + 30-day expiry semantics', () => {
   assert.ok(o.allowed_metadata.includes('omitted_at'));
   assert.ok(o.allowed_metadata.includes('expires_at'));
   assert.strictEqual(o.full_content_persistence, false);
+  assert.strictEqual(o.expiry_boundary, 'retention_current_time >= expires_at');
+  assert.strictEqual(o.read_after_expiry, 'forbidden');
+  assert.strictEqual(o.use_after_expiry, 'forbidden');
+  assert.strictEqual(o.cleanup_required, true);
+  assert.strictEqual(o.cleanup_before_post_expiry_read, true);
+  assert.strictEqual(o.cleanup_on_store_initialization, true);
 });
 
 // C41: ContextPackage hydration_started_at + budget audit fields
@@ -392,6 +401,40 @@ test('C41 ContextPackage hydration_started_at + budget audit fields', () => {
   const expectedBudgetFields = ['tokenizer_id', 'context_window_tokens', 'response_headroom_tokens', 'execution_reserve_tokens', 'active_conversation_tokens', 'mandatory_context_tokens', 'available_context_tokens', 'retrieval_budget_tokens', 'retrieved_tokens_used'];
   assert.deepStrictEqual([...cp.budget_audit_fields].sort(), [...expectedBudgetFields].sort());
   assert.strictEqual(cp.no_secrets, true);
+});
+
+// C42: global candidate reachability
+test('C42 global candidate reachability', () => {
+  const ss = policy.ranking.scope_specificity;
+  assert.strictEqual(ss.global_candidate_foreign_job_exempt, true);
+  assert.strictEqual(ss.global_scope_job_id, 'absent_or_null');
+  assert.strictEqual(ss.mapping.global_scope, 0.50);
+  assert.strictEqual(ss.foreign_job_requires_job_id_present, true);
+});
+
+// C43: retention outcome enforcement
+test('C43 retention outcome enforcement', () => {
+  const o = policy.omission;
+  assert.strictEqual(o.expiry_boundary, 'retention_current_time >= expires_at');
+  assert.strictEqual(o.read_after_expiry, 'forbidden');
+  assert.strictEqual(o.use_after_expiry, 'forbidden');
+  assert.strictEqual(o.cleanup_required, true);
+  assert.strictEqual(o.cleanup_before_post_expiry_read, true);
+  assert.strictEqual(o.cleanup_on_store_initialization, true);
+  assert.ok(!o.expiry_formula.includes('eligible for cleanup'), 'Must not say eligible for cleanup');
+});
+
+// C44: architecture/policy parity
+test('C44 architecture/policy parity', () => {
+  assert.ok(archDoc.includes('context-hydration@1.0.1'), 'Architecture must reference 1.0.1');
+  assert.ok(archDoc.includes('hydration_started_at'), 'Architecture must mention hydration_started_at');
+  assert.ok(archDoc.includes('Jaccard'), 'Architecture must mention Jaccard');
+  assert.ok(archDoc.includes('tokenizer_id'), 'Architecture must mention tokenizer_id');
+  assert.ok(archDoc.includes('available_context'), 'Architecture must mention available_context');
+  assert.ok(archDoc.includes('omitted_at'), 'Architecture must mention omitted_at');
+  assert.ok(archDoc.includes('expires_at'), 'Architecture must mention expires_at');
+  assert.ok(archDoc.includes('global'), 'Architecture must mention global');
+  assert.ok(archDoc.includes('H17'), 'Architecture must mention H17');
 });
 
 // Summary
