@@ -78,7 +78,7 @@ Input: `session_id`, `job_id`, latest checkpoint, user request, active constrain
 
 ## Scoring and policy versioning — TARGET
 
-Weights: semantic relevance = 0.50, scope specificity = 0.25, authority = 0.20, recency = 0.05. Foreign-job knowledge is a hard reject before scoring. Tie-break: 1) total_score DESC, 2) scope_specificity DESC, 3) authority DESC, 4) updated_at DESC, 5) source_id ASC. Behavior-affecting changes require a policy version increment. Target identity: `context-hydration@1.0.0`. The actual policy file belongs to future issue 9A-01.
+Weights: semantic relevance = 0.50, scope specificity = 0.25, authority = 0.20, recency = 0.05. Foreign-job knowledge is a hard reject before scoring. Tie-break: 1) total_score DESC, 2) scope_specificity DESC, 3) authority DESC, 4) updated_at DESC, 5) source_id ASC. Behavior-affecting changes require a policy version increment. Target identity: `context-hydration@1.0.1`. 1.0.0 is the initial merged contract; 1.0.1 supersedes it as the implementation target after post-merge determinism corrections.
 
 ## Context budget and omitted retention — TARGET
 

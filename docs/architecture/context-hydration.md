@@ -2,7 +2,8 @@
 
 **Status:** TARGET — CONTRACT LOCKED
 **Implementation:** NOT YET IMPLEMENTED
-**Policy:** context-hydration@1.0.0
+**Policy:** context-hydration@1.0.1
+**Supersedes:** context-hydration@1.0.0 (initial merged contract, historical)
 
 ---
 

@@ -1,7 +1,9 @@
 {
   "policy_id": "context-hydration",
-  "policy_version": "1.0.0",
-  "policy_ref": "context-hydration@1.0.0",
+  "policy_version": "1.0.1",
+  "policy_ref": "context-hydration@1.0.1",
+  "supersedes": "context-hydration@1.0.0",
+  "supersession_reason": "Post-merge determinism corrections: scoring formulas, budget denominator, retention timestamps",
   "objective": {
     "fields": [
       "objective_id",
@@ -57,11 +59,62 @@
       "recency": 0.05
     },
     "weight_sum": 1.00,
+    "term_normalization": {
+      "steps": ["unicode_nfkc", "lowercase", "trim_whitespace", "collapse_internal_whitespace", "remove_empty", "deduplicate"],
+      "description": "Each term: NFKC normalize, lowercase, trim, collapse internal whitespace to single ASCII space, remove empty, deduplicate exact normalized terms"
+    },
+    "semantic_relevance": {
+      "formula": "jaccard_similarity",
+      "definition": "|O ∩ C| / |O ∪ C|",
+      "zero_union": 0,
+      "range": [0.0, 1.0],
+      "requires_network": false,
+      "description": "Jaccard similarity between normalized objective retrieval terms (O) and candidate retrieval terms (C)"
+    },
+    "scope_specificity": {
+      "foreign_job_reject": true,
+      "mapping": {
+        "same_active_session": 1.00,
+        "same_active_job": 0.75,
+        "global_scope": 0.50,
+        "otherwise": 0.00
+      },
+      "range": [0.0, 1.0]
+    },
     "authority_baseline": {
       "curated": 1.00,
       "reviewed_session_fact": 0.90,
       "historical_checkpoint": 0.80,
       "semantic_memory": 0.50
+    },
+    "recency": {
+      "anchor": "hydration_started_at",
+      "anchor_format": "RFC3339 UTC",
+      "anchor_immutability": "captured once per hydration run, immutable for entire run",
+      "age_calculation": "max(0, hydration_started_at - candidate.updated_at)",
+      "candidate_updated_at_format": "RFC3339 UTC",
+      "future_values_floored": true,
+      "buckets": {
+        "age <= 1 day": 1.00,
+        "age <= 7 days": 0.75,
+        "age <= 30 days": 0.50,
+        "age <= 90 days": 0.25,
+        "age > 90 days": 0.00
+      },
+      "constants_seconds": {
+        "1_day": 86400,
+        "7_days": 604800,
+        "30_days": 2592000,
+        "90_days": 7776000
+      }
+    },
+    "total_score": {
+      "formula": "(semantic_relevance * 0.50) + (scope_specificity * 0.25) + (authority * 0.20) + (recency * 0.05)",
+      "quantization": {
+        "function": "quantize6",
+        "definition": "floor((x * 1000000) + 0.5) / 1000000"
+      },
+      "range": [0.0, 1.0]
     },
     "tie_break": [
       "total_score_desc",
@@ -69,9 +122,40 @@
       "authority_desc",
       "updated_at_desc",
       "source_id_asc"
+    ],
+    "deterministic_inputs": [
+      "candidate records",
+      "normalized scoring inputs",
+      "StructuredObjective",
+      "job/session scope",
+      "hydration_started_at",
+      "policy version"
     ]
   },
   "budget": {
+    "required_inputs": [
+      "context_window_tokens",
+      "response_headroom_tokens",
+      "execution_reserve_tokens",
+      "active_conversation_tokens",
+      "mandatory_context_tokens"
+    ],
+    "tokenizer_id_required": true,
+    "reservation_order": [
+      "1. start with context_window_tokens",
+      "2. reserve response_headroom_tokens",
+      "3. reserve execution_reserve_tokens",
+      "4. account for active_conversation_tokens",
+      "5. account for mandatory_context_tokens",
+      "6. calculate remaining available context",
+      "7. allocate retrieval budget"
+    ],
+    "formulas": {
+      "usable_before_mandatory": "context_window_tokens - response_headroom_tokens - execution_reserve_tokens - active_conversation_tokens",
+      "mandatory_overflow": "mandatory_context_tokens > usable_before_mandatory → CONTEXT_BUDGET_EXCEEDED",
+      "available_context_tokens": "usable_before_mandatory - mandatory_context_tokens",
+      "retrieval_budget_tokens": "floor(available_context_tokens * 0.20)"
+    },
     "retrieved_max_fraction": 0.20,
     "mandatory_protected_set": [
       "current_objective",
@@ -88,6 +172,7 @@
       "hydration_run_id",
       "policy_id",
       "policy_version",
+      "hydration_started_at",
       "objective",
       "job_id",
       "session_id",
@@ -105,6 +190,17 @@
       "reason",
       "provenance"
     ],
+    "budget_audit_fields": [
+      "tokenizer_id",
+      "context_window_tokens",
+      "response_headroom_tokens",
+      "execution_reserve_tokens",
+      "active_conversation_tokens",
+      "mandatory_context_tokens",
+      "available_context_tokens",
+      "retrieval_budget_tokens",
+      "retrieved_tokens_used"
+    ],
     "no_secrets": true
   },
   "omission": {
@@ -117,11 +213,17 @@
       "rank",
       "omission_reason",
       "estimated_tokens",
-      "hydration_run_id"
+      "hydration_run_id",
+      "omitted_at",
+      "expires_at"
     ],
+    "timestamp_format": "RFC3339 UTC",
+    "omitted_at_source": "hydration_started_at",
+    "retention_seconds": 2592000,
+    "expiry_formula": "omitted_at + 2592000 seconds (30 days)",
+    "cleanup_eligibility": "cleanup_current_time >= expires_at",
     "redacted": true,
-    "local_only": true,
-    "retention_days": 30
+    "local_only": true
   },
   "skills": {
     "classes": ["PRIMARY", "SUPPORTING", "CONFLICTING"],

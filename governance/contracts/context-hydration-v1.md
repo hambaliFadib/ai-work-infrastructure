@@ -2,10 +2,12 @@
 
 **Status:** TARGET — CONTRACT LOCKED
 **Implementation:** NOT YET IMPLEMENTED
-**Policy:** context-hydration@1.0.0
+**Policy:** context-hydration@1.0.1
 **Policy ID:** context-hydration
-**Policy Version:** 1.0.0
-**Policy Ref:** context-hydration@1.0.0
+**Policy Version:** 1.0.1
+**Policy Ref:** context-hydration@1.0.1
+**Supersedes:** context-hydration@1.0.0 (initial merged contract)
+**Supersession Reason:** Post-merge determinism corrections: scoring formulas, budget denominator, retention timestamps
 
 ---
 
@@ -88,7 +90,22 @@ ContextPackage
 
 ---
 
-## 5. Confidence Policy
+## 5. Term Normalization
+
+For both `StructuredObjective.retrieval_terms[]` and `candidate.retrieval_terms[]`, apply exact v1 normalization:
+
+1. Unicode NFKC
+2. lowercase
+3. trim leading/trailing whitespace
+4. collapse internal whitespace to one ASCII space
+5. remove empty terms
+6. deduplicate exact normalized terms
+
+Set semantics are then used for semantic-relevance calculation.
+
+---
+
+## 6. Confidence Policy
 
 | Level | Threshold | Behavior |
 |---|---|---|
@@ -125,9 +142,9 @@ Latest valid checkpoint is mandatory and does NOT compete in candidate ranking.
 
 ---
 
-## 7. Deterministic Ranking
+## 8. Deterministic Ranking
 
-### 7.1 Weights
+### 8.1 Weights
 
 | Factor | Weight |
 |---|---|
@@ -137,7 +154,36 @@ Latest valid checkpoint is mandatory and does NOT compete in candidate ranking.
 | recency | 0.05 |
 | **Total** | **1.00** |
 
-### 7.2 Authority Baseline
+### 8.2 Semantic Relevance v1
+
+Deterministic Jaccard similarity between normalized retrieval-term sets.
+
+Let O = normalized objective retrieval terms, C = normalized candidate retrieval terms.
+
+```
+semantic_relevance = |O ∩ C| / |O ∪ C|
+```
+
+If |O ∪ C| = 0, then semantic_relevance = 0.
+
+Range: 0.0–1.0. Does NOT require network, LLM, or embedding provider.
+
+### 8.3 Scope Specificity v1
+
+Foreign-job candidate (candidate.job_id != active job_id) → HARD REJECT BEFORE SCORING.
+
+For eligible candidates:
+
+| Condition | Score |
+|---|---|
+| same active session | 1.00 |
+| same active job | 0.75 |
+| global scope | 0.50 |
+| otherwise | 0.00 |
+
+Same session outranks same job. Same job outranks global. Range: 0.0–1.0.
+
+### 8.4 Authority Baseline
 
 | Source | Authority |
 |---|---|
@@ -146,7 +192,35 @@ Latest valid checkpoint is mandatory and does NOT compete in candidate ranking.
 | historical checkpoint | 0.80 |
 | semantic memory | 0.50 |
 
-### 7.3 Tie-Break Order
+No other source authority value may be silently invented under policy 1.0.1. Unknown authority category must fail closed or be made ineligible before ranking.
+
+### 8.5 Recency v1
+
+Fixed run anchor: `hydration_started_at` (RFC3339 UTC, captured exactly once per run, immutable).
+
+Candidate age: `age_seconds = max(0, hydration_started_at - candidate.updated_at)`
+
+| Age Bucket | Score |
+|---|---|
+| age <= 1 day (86400s) | 1.00 |
+| age <= 7 days (604800s) | 0.75 |
+| age <= 30 days (2592000s) | 0.50 |
+| age <= 90 days (7776000s) | 0.25 |
+| age > 90 days | 0.00 |
+
+Future `updated_at` values are floored to age 0. No call to current wall-clock time may occur separately for each candidate.
+
+### 8.6 Total Score Formula
+
+```
+raw_total = (semantic_relevance * 0.50) + (scope_specificity * 0.25) + (authority * 0.20) + (recency * 0.05)
+```
+
+Quantize6: `floor((x * 1000000) + 0.5) / 1000000`
+
+Final: `total_score = quantize6(raw_total)`. Range: 0.0–1.0.
+
+### 8.7 Tie-Break Order
 
 1. total_score DESC
 2. scope_specificity DESC
@@ -154,17 +228,54 @@ Latest valid checkpoint is mandatory and does NOT compete in candidate ranking.
 4. updated_at DESC
 5. source_id ASC
 
-### 7.4 Determinism (H17)
+### 8.8 Determinism (H17)
 
-Identical candidate set + StructuredObjective + job/session scope + policy version must produce identical ordering.
+Identical candidate set + normalized scoring inputs + StructuredObjective + job/session scope + hydration_started_at + policy version must produce identical ordering.
 
 ---
 
-## 8. Budget Contract
+## 9. Budget Input Contract
 
-- Retrieved knowledge maximum: <= 20% of available context
+Required budget inputs as explicit non-negative integer token counts:
 
-### 8.1 Protected Set (Never Silently Dropped)
+- context_window_tokens
+- response_headroom_tokens
+- execution_reserve_tokens
+- active_conversation_tokens
+- mandatory_context_tokens
+
+Also require: `tokenizer_id`. The runtime resolves token counts using the active model tokenizer BEFORE the budget stage.
+
+---
+
+## 10. Budget Reservation Order
+
+Normatively:
+
+1. start with context_window_tokens
+2. reserve response_headroom_tokens
+3. reserve execution_reserve_tokens
+4. account for active_conversation_tokens
+5. account for mandatory_context_tokens
+6. calculate remaining available context
+7. allocate retrieval budget
+
+Formulas:
+
+```
+usable_before_mandatory = context_window_tokens - response_headroom_tokens - execution_reserve_tokens - active_conversation_tokens
+```
+
+Mandatory overflow: `mandatory_context_tokens > usable_before_mandatory → CONTEXT_BUDGET_EXCEEDED`
+
+```
+available_context_tokens = usable_before_mandatory - mandatory_context_tokens
+retrieval_budget_tokens = floor(available_context_tokens * 0.20)
+```
+
+"Available context" means exactly: remaining context after response reserve, execution reserve, active conversation, and mandatory context.
+
+### 10.1 Protected Set (Never Silently Dropped)
 
 - Current objective
 - Job/profile identity
@@ -173,7 +284,7 @@ Identical candidate set + StructuredObjective + job/session scope + policy versi
 - Latest valid checkpoint
 - Mandatory project instructions
 
-### 8.2 Overflow
+### 10.2 Overflow
 
 If mandatory context itself exceeds its usable budget: `CONTEXT_BUDGET_EXCEEDED`
 
@@ -181,22 +292,23 @@ No silent mandatory-context truncation.
 
 ---
 
-## 9. ContextPackage Envelope
+## 11. ContextPackage Envelope
 
 | Field | Description |
 |---|---|
 | hydration_run_id | Run identifier |
 | policy_id | Policy identifier |
 | policy_version | Policy version |
+| hydration_started_at | Immutable run anchor (RFC3339 UTC) |
 | objective | StructuredObjective |
 | job_id | Job identifier |
 | session_id | Session identifier |
 | mandatory[] | Mandatory context records |
 | retrieved[] | Retrieved knowledge records |
 | omitted[] | Omitted record metadata |
-| budget | Budget utilization |
+| budget | Budget utilization audit |
 
-### 9.1 Retrieved Record Audit Fields
+### 11.1 Retrieved Record Audit Fields
 
 - source_id
 - source_type
@@ -206,17 +318,29 @@ No silent mandatory-context truncation.
 - reason
 - provenance
 
+### 11.2 Budget Audit Fields
+
+- tokenizer_id
+- context_window_tokens
+- response_headroom_tokens
+- execution_reserve_tokens
+- active_conversation_tokens
+- mandatory_context_tokens
+- available_context_tokens
+- retrieval_budget_tokens
+- retrieved_tokens_used
+
 Do NOT persist secrets.
 
 ---
 
-## 10. Omission Contract
+## 12. Omission Contract
 
-### 10.1 Full Content Persistence
+### 12.1 Full Content Persistence
 
 0 — no omitted raw content is persisted.
 
-### 10.2 Allowed Omission Metadata
+### 12.2 Allowed Omission Metadata
 
 - source_id
 - source_type
@@ -226,12 +350,18 @@ Do NOT persist secrets.
 - omission_reason
 - estimated_tokens
 - hydration_run_id
+- omitted_at (RFC3339 UTC, = hydration_started_at)
+- expires_at (omitted_at + 2,592,000 seconds = 30 days)
 
-### 10.3 Metadata Constraints
+### 12.3 Metadata Constraints
 
 - Redacted
 - Local-only
-- Default retention = 30 days
+- Expiration: metadata is eligible for cleanup when cleanup_current_time >= expires_at
+
+### 12.4 Time Anchor
+
+`hydration_run_id` does NOT implicitly encode time. Do not rely on filesystem mtime, database insertion timestamp, process start time, or unstated storage metadata for H16.
 
 ---
 
