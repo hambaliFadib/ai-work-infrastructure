@@ -275,9 +275,8 @@ Hard-limit evaluation MUST take precedence over override-required evaluation. Th
 
 | Condition | Error |
 |---|---|
-| 4+ skills without override | SKILL_CHAIN_REQUIRES_OVERRIDE |
-| 5+ skills without override | SKILL_CHAIN_REQUIRES_OVERRIDE |
-| >5 skills (regardless of override) | SKILL_CHAIN_LIMIT_EXCEEDED |
+| 4–5 skills without explicit override | SKILL_CHAIN_REQUIRES_OVERRIDE |
+| >5 skills regardless of override | SKILL_CHAIN_LIMIT_EXCEEDED |
 | Conflict detected | SKILL_CONFLICT |
 
 ### 11.6 Invariants

@@ -167,7 +167,7 @@ test('C17 omission metadata allowlist exact', () => {
     'rank', 'omission_reason', 'estimated_tokens', 'hydration_run_id'
   ];
   const actual = policy.omission.allowed_metadata;
-  assert.deepStrictEqual(actual.sort(), required.sort());
+  assert.deepStrictEqual([...actual].sort(), [...required].sort());
 });
 
 // C18: metadata retention=30 days
