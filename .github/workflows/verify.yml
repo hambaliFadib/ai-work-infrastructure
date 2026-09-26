@@ -52,6 +52,8 @@ jobs:
         run: node runtime/mcp/servers/oracle/tests/run-all.js
       - name: MCP M01-M08 binding tests
         run: node runtime/mcp/servers/oracle/tests/mcp-binding.test.js
+      - name: Context Hydration contract tests
+        run: node runtime/tests/context-hydration/run-all.js
 
   security-scan:
     name: security-scan

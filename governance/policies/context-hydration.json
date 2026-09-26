@@ -1,0 +1,160 @@
+{
+  "policy_id": "context-hydration",
+  "policy_version": "1.0.0",
+  "policy_ref": "context-hydration@1.0.0",
+  "objective": {
+    "fields": [
+      "objective_id",
+      "summary",
+      "intent",
+      "scope",
+      "entities",
+      "constraints",
+      "retrieval_terms",
+      "confidence",
+      "provenance"
+    ],
+    "input_sources": [
+      "session_id",
+      "job_id",
+      "latest_checkpoint",
+      "user_request",
+      "active_constraints",
+      "optional_explicit_objective"
+    ],
+    "explicit_outranks_inferred": true,
+    "ambiguity_must_not_invent_entities": true
+  },
+  "confidence": {
+    "high_threshold": 0.80,
+    "medium_threshold": 0.60,
+    "low_below": 0.60,
+    "low_behavior": {
+      "mandatory_context_loads": true,
+      "automatic_retrieval_disabled": true
+    }
+  },
+  "retrieval": {
+    "eligibility": {
+      "mandatory_context": "mandatory",
+      "curated_knowledge": "eligible",
+      "reviewed_session_fact": "eligible",
+      "historical_checkpoint": "eligible",
+      "semantic_memory": "advisory",
+      "raw_source": "explicit_only"
+    },
+    "foreign_job_reject": true,
+    "raw_automatic_retrieval": false,
+    "semantic_memory_authoritative": false,
+    "latest_checkpoint_mandatory": true,
+    "latest_checkpoint_bypasses_ranking": true
+  },
+  "ranking": {
+    "weights": {
+      "semantic_relevance": 0.50,
+      "scope_specificity": 0.25,
+      "authority": 0.20,
+      "recency": 0.05
+    },
+    "weight_sum": 1.00,
+    "authority_baseline": {
+      "curated": 1.00,
+      "reviewed_session_fact": 0.90,
+      "historical_checkpoint": 0.80,
+      "semantic_memory": 0.50
+    },
+    "tie_break": [
+      "total_score_desc",
+      "scope_specificity_desc",
+      "authority_desc",
+      "updated_at_desc",
+      "source_id_asc"
+    ]
+  },
+  "budget": {
+    "retrieved_max_fraction": 0.20,
+    "mandatory_protected_set": [
+      "current_objective",
+      "job_profile_identity",
+      "active_safety_constraints",
+      "approval_state",
+      "latest_valid_checkpoint",
+      "mandatory_project_instructions"
+    ],
+    "overflow_error": "CONTEXT_BUDGET_EXCEEDED"
+  },
+  "context_package": {
+    "required_fields": [
+      "hydration_run_id",
+      "policy_id",
+      "policy_version",
+      "objective",
+      "job_id",
+      "session_id",
+      "mandatory",
+      "retrieved",
+      "omitted",
+      "budget"
+    ],
+    "retrieved_audit_fields": [
+      "source_id",
+      "source_type",
+      "scope",
+      "score",
+      "rank",
+      "reason",
+      "provenance"
+    ],
+    "no_secrets": true
+  },
+  "omission": {
+    "full_content_persistence": false,
+    "allowed_metadata": [
+      "source_id",
+      "source_type",
+      "scope",
+      "score",
+      "rank",
+      "omission_reason",
+      "estimated_tokens",
+      "hydration_run_id"
+    ],
+    "redacted": true,
+    "local_only": true,
+    "retention_days": 30
+  },
+  "skills": {
+    "classes": ["PRIMARY", "SUPPORTING", "CONFLICTING"],
+    "execution_order": ["UNDERSTAND", "DESIGN/PLAN", "EXECUTE", "VALIDATE"],
+    "limits": {
+      "default_max": 3,
+      "override_max": 5,
+      "hard_max": 5
+    },
+    "decision_rules": {
+      "allow_at_or_below_default_without_override": true,
+      "require_override_above_default_through_hard_max": true,
+      "allow_through_hard_max_with_override": true,
+      "reject_above_hard_max_regardless_of_override": true,
+      "hard_limit_precedes_override_requirement": true
+    },
+    "errors": {
+      "chain_requires_override": "SKILL_CHAIN_REQUIRES_OVERRIDE",
+      "chain_limit_exceeded": "SKILL_CHAIN_LIMIT_EXCEEDED",
+      "conflict": "SKILL_CONFLICT"
+    },
+    "invariants": {
+      "never_silently_truncate": true,
+      "user_explicit_highest_priority": true,
+      "cannot_override_runtime_policy": true,
+      "cannot_override_permissions": true,
+      "cannot_override_security_constraints": true
+    }
+  },
+  "acceptance": {
+    "objective_ids": ["O01", "O02", "O03", "O04", "O05", "O06", "O07", "O08", "O09", "O10"],
+    "hydration_ids": ["H01", "H02", "H03", "H04", "H05", "H06", "H07", "H08", "H09", "H10", "H11", "H12", "H13", "H14", "H15", "H16", "H17"],
+    "skill_ids": ["S01", "S02", "S03", "S04", "S05", "S06", "S07", "S08", "S09", "S10"],
+    "total": 37
+  }
+}
