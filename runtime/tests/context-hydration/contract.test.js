@@ -198,19 +198,19 @@ test('C21 skill errors exact', () => {
 // C22: acceptance objective IDs O01–O10 exact
 test('C22 acceptance objective IDs O01-O10 exact', () => {
   const expected = ['O01','O02','O03','O04','O05','O06','O07','O08','O09','O10'];
-  assert.deepStrictEqual(policy.acceptance.objective_ids.sort(), expected.sort());
+  assert.deepStrictEqual([...policy.acceptance.objective_ids].sort(), [...expected].sort());
 });
 
 // C23: hydration IDs H01–H17 exact
 test('C23 hydration IDs H01-H17 exact', () => {
   const expected = Array.from({length: 17}, (_, i) => `H${String(i+1).padStart(2, '0')}`);
-  assert.deepStrictEqual(policy.acceptance.hydration_ids.sort(), expected.sort());
+  assert.deepStrictEqual([...policy.acceptance.hydration_ids].sort(), [...expected].sort());
 });
 
 // C24: skill IDs S01–S10 exact
 test('C24 skill IDs S01-S10 exact', () => {
   const expected = Array.from({length: 10}, (_, i) => `S${String(i+1).padStart(2, '0')}`);
-  assert.deepStrictEqual(policy.acceptance.skill_ids.sort(), expected.sort());
+  assert.deepStrictEqual([...policy.acceptance.skill_ids].sort(), [...expected].sort());
 });
 
 // C25: acceptance total=37
@@ -228,6 +228,71 @@ test('C26 contract document references policy version', () => {
 test('C27 architecture doc says TARGET / not implemented', () => {
   assert.ok(archDoc.includes('TARGET'), 'Architecture doc must say TARGET');
   assert.ok(archDoc.includes('NOT YET IMPLEMENTED'), 'Architecture doc must say NOT YET IMPLEMENTED');
+});
+
+// C28: StructuredObjective contract exact
+test('C28 StructuredObjective contract exact', () => {
+  const obj = policy.objective;
+  const requiredFields = ['objective_id','summary','intent','scope','entities','constraints','retrieval_terms','confidence','provenance'];
+  assert.deepStrictEqual([...obj.fields].sort(), [...requiredFields].sort());
+  const requiredInputs = ['session_id','job_id','latest_checkpoint','user_request','active_constraints','optional_explicit_objective'];
+  assert.deepStrictEqual([...obj.input_sources].sort(), [...requiredInputs].sort());
+  assert.strictEqual(obj.explicit_outranks_inferred, true);
+  assert.strictEqual(obj.ambiguity_must_not_invent_entities, true);
+});
+
+// C29: authority + tie-break exact
+test('C29 authority + tie-break exact', () => {
+  const auth = policy.ranking.authority_baseline;
+  assert.strictEqual(auth.curated, 1.00);
+  assert.strictEqual(auth.reviewed_session_fact, 0.90);
+  assert.strictEqual(auth.historical_checkpoint, 0.80);
+  assert.strictEqual(auth.semantic_memory, 0.50);
+  const expectedTieBreak = ['total_score_desc','scope_specificity_desc','authority_desc','updated_at_desc','source_id_asc'];
+  assert.deepStrictEqual(policy.ranking.tie_break, expectedTieBreak);
+  assert.strictEqual(policy.ranking.weight_sum, 1.00);
+});
+
+// C30: mandatory protected set exact
+test('C30 mandatory protected set exact', () => {
+  const expected = [
+    'current_objective','job_profile_identity','active_safety_constraints',
+    'approval_state','latest_valid_checkpoint','mandatory_project_instructions'
+  ];
+  assert.deepStrictEqual([...policy.budget.mandatory_protected_set].sort(), [...expected].sort());
+});
+
+// C31: ContextPackage contract exact
+test('C31 ContextPackage contract exact', () => {
+  const cp = policy.context_package;
+  const requiredFields = ['hydration_run_id','policy_id','policy_version','objective','job_id','session_id','mandatory','retrieved','omitted','budget'];
+  assert.deepStrictEqual([...cp.required_fields].sort(), [...requiredFields].sort());
+  const auditFields = ['source_id','source_type','scope','score','rank','reason','provenance'];
+  assert.deepStrictEqual([...cp.retrieved_audit_fields].sort(), [...auditFields].sort());
+  assert.strictEqual(cp.no_secrets, true);
+});
+
+// C32: skill classes/order/invariants exact
+test('C32 skill classes/order/invariants exact', () => {
+  assert.deepStrictEqual(policy.skills.classes, ['PRIMARY', 'SUPPORTING', 'CONFLICTING']);
+  assert.deepStrictEqual(policy.skills.execution_order, ['UNDERSTAND', 'DESIGN/PLAN', 'EXECUTE', 'VALIDATE']);
+  const inv = policy.skills.invariants;
+  assert.strictEqual(inv.never_silently_truncate, true);
+  assert.strictEqual(inv.user_explicit_highest_priority, true);
+  assert.strictEqual(inv.cannot_override_runtime_policy, true);
+  assert.strictEqual(inv.cannot_override_permissions, true);
+  assert.strictEqual(inv.cannot_override_security_constraints, true);
+});
+
+// C33: skill decision precedence exact
+test('C33 skill decision precedence exact', () => {
+  const dr = policy.skills.decision_rules;
+  assert.ok(dr, 'decision_rules must exist');
+  assert.strictEqual(dr.allow_at_or_below_default_without_override, true);
+  assert.strictEqual(dr.require_override_above_default_through_hard_max, true);
+  assert.strictEqual(dr.allow_through_hard_max_with_override, true);
+  assert.strictEqual(dr.reject_above_hard_max_regardless_of_override, true);
+  assert.strictEqual(dr.hard_limit_precedes_override_requirement, true);
 });
 
 // Summary

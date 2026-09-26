@@ -125,11 +125,18 @@
   },
   "skills": {
     "classes": ["PRIMARY", "SUPPORTING", "CONFLICTING"],
-    "execution_order": ["UNDERSTAND", "DESIGN_PLAN", "EXECUTE", "VALIDATE"],
+    "execution_order": ["UNDERSTAND", "DESIGN/PLAN", "EXECUTE", "VALIDATE"],
     "limits": {
       "default_max": 3,
       "override_max": 5,
       "hard_max": 5
+    },
+    "decision_rules": {
+      "allow_at_or_below_default_without_override": true,
+      "require_override_above_default_through_hard_max": true,
+      "allow_through_hard_max_with_override": true,
+      "reject_above_hard_max_regardless_of_override": true,
+      "hard_limit_precedes_override_requirement": true
     },
     "errors": {
       "chain_requires_override": "SKILL_CHAIN_REQUIRES_OVERRIDE",

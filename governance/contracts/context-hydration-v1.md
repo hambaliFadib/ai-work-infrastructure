@@ -258,16 +258,29 @@ Do NOT persist secrets.
 | Explicit-user override | max 5 |
 | Hard maximum | 5 |
 
-### 11.4 Error Conditions
+### 11.4 Decision Rules
+
+| Skills | Override | Result |
+|---|---|---|
+| 1–3 | none needed | Allowed |
+| 4 | none | SKILL_CHAIN_REQUIRES_OVERRIDE |
+| 5 | none | SKILL_CHAIN_REQUIRES_OVERRIDE |
+| 4–5 | explicit override | Allowed |
+| >5 | any | SKILL_CHAIN_LIMIT_EXCEEDED |
+| conflict | any | SKILL_CONFLICT |
+
+Hard-limit evaluation MUST take precedence over override-required evaluation. Therefore 6 skills without override resolves to SKILL_CHAIN_LIMIT_EXCEEDED, NOT SKILL_CHAIN_REQUIRES_OVERRIDE.
+
+### 11.5 Error Conditions
 
 | Condition | Error |
 |---|---|
 | 4+ skills without override | SKILL_CHAIN_REQUIRES_OVERRIDE |
 | 5+ skills without override | SKILL_CHAIN_REQUIRES_OVERRIDE |
-| >5 skills with override | SKILL_CHAIN_LIMIT_EXCEEDED |
+| >5 skills (regardless of override) | SKILL_CHAIN_LIMIT_EXCEEDED |
 | Conflict detected | SKILL_CONFLICT |
 
-### 11.5 Invariants
+### 11.6 Invariants
 
 - Never silently truncate
 - Explicit user-selected skill has highest skill-selection priority

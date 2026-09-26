@@ -167,13 +167,15 @@ Identical candidate set + StructuredObjective + job/session scope + policy versi
 
 ## 13. Issue Ownership
 
-| Issue | Scope | Status |
-|---|---|---|
-| #8 (9A-01) | This contract | READY |
-| #9 (9A-02) | Objective Parser | BLOCKED |
-| #10 (9A-03) | Ranking Policy | BLOCKED |
-| #11 (9A-04) | Retrieval Adapters | BLOCKED |
-| #12 (9A-05) | Budget + ContextPackage | BLOCKED |
-| #13 (9A-06) | Skill Resolver | BLOCKED |
-| #14 (9A-07) | Integration | BLOCKED |
-| #15 (9A-08) | Acceptance Closure | BLOCKED |
+Live implementation status and dependency state are authoritative in GitHub issues and are intentionally not duplicated here.
+
+| Issue | Ownership |
+|---|---|
+| #8 (9A-01) | This contract |
+| #9 (9A-02) | Objective Parser |
+| #10 (9A-03) | Ranking Policy |
+| #11 (9A-04) | Retrieval Adapters |
+| #12 (9A-05) | Budget + ContextPackage |
+| #13 (9A-06) | Skill Resolver |
+| #14 (9A-07) | Integration |
+| #15 (9A-08) | Acceptance Closure |
