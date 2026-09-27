@@ -225,10 +225,13 @@ test('C26 contract document references policy version', () => {
   assert.ok(contractDoc.includes('1.0.1'), 'Contract must reference version');
 });
 
-// C27: architecture doc says TARGET / not implemented
-test('C27 architecture doc says TARGET / not implemented', () => {
-  assert.ok(archDoc.includes('TARGET'), 'Architecture doc must say TARGET');
-  assert.ok(archDoc.includes('NOT YET IMPLEMENTED'), 'Architecture doc must say NOT YET IMPLEMENTED');
+// C27: architecture doc implementation status exact
+test('C27 architecture doc implementation status exact', () => {
+  assert.ok(archDoc.includes('CONTRACT LOCKED'), 'Architecture doc must say CONTRACT LOCKED');
+  assert.ok(archDoc.includes('COMPONENTS IMPLEMENTED'), 'Architecture doc must say COMPONENTS IMPLEMENTED');
+  assert.ok(archDoc.includes('INTEGRATION PENDING'), 'Architecture doc must say INTEGRATION PENDING');
+  assert.ok(archDoc.includes('#14'), 'Architecture doc must reference #14');
+  assert.ok(!archDoc.includes('Implementation: NOT YET IMPLEMENTED'), 'Architecture doc must not claim NOT YET IMPLEMENTED');
 });
 
 // C28: StructuredObjective contract exact
@@ -435,6 +438,86 @@ test('C44 architecture/policy parity', () => {
   assert.ok(archDoc.includes('expires_at'), 'Architecture must mention expires_at');
   assert.ok(archDoc.includes('global'), 'Architecture must mention global');
   assert.ok(archDoc.includes('H17'), 'Architecture must mention H17');
+});
+
+// C45: dedup identity exact
+test('C45 dedup identity exact', () => {
+  const d = policy.budget.dedup;
+  assert.ok(d, 'budget.dedup must exist');
+  assert.deepStrictEqual(d.identity_fields, ['source_type', 'source_id']);
+  assert.strictEqual(d.malformed_identity, 'fail_closed');
+  assert.strictEqual(d.duplicate_resolution, 'first_in_ranked_order');
+  assert.strictEqual(d.mandatory_context_exempt, true);
+});
+
+// C46: ranked-order greedy skip-and-continue semantics exact
+test('C46 ranked-order greedy skip-and-continue semantics exact', () => {
+  const rf = policy.budget.retrieval_fitting;
+  assert.ok(rf, 'budget.retrieval_fitting must exist');
+  assert.strictEqual(rf.strategy, 'ranked_order_greedy_skip_and_continue');
+  assert.strictEqual(rf.candidate_atomic, true);
+  assert.strictEqual(rf.reordering, false);
+  assert.strictEqual(rf.packing_optimization, false);
+  assert.strictEqual(rf.candidate_truncation, false);
+  assert.strictEqual(rf.continue_after_non_fit, true);
+});
+
+// C47: conflict precedence exact
+test('C47 conflict precedence exact', () => {
+  const dr = policy.skills.decision_rules;
+  assert.strictEqual(dr.conflict_precedes_chain_limits, true);
+  assert.strictEqual(dr.hard_limit_precedes_override_requirement, true);
+  assert.strictEqual(policy.skills.duplicate_resolution.conflict_detection_before_collapse, true);
+});
+
+// C48: duplicate skill_id semantics exact
+test('C48 duplicate skill_id semantics exact', () => {
+  const d = policy.skills.duplicate_resolution;
+  assert.ok(d, 'skills.duplicate_resolution must exist');
+  assert.strictEqual(d.identity_field, 'skill_id');
+  assert.strictEqual(d.first_occurrence_retains_class, true);
+  assert.strictEqual(d.first_occurrence_retains_phase, true);
+  assert.strictEqual(d.explicit_flag, 'logical_or');
+  assert.strictEqual(d.first_occurrence_position_preserved, true);
+  assert.strictEqual(d.conflict_detection_before_collapse, true);
+});
+
+// C49: empty skill chain contract exact
+test('C49 empty skill chain contract exact', () => {
+  const e = policy.skills.empty_chain;
+  assert.ok(e, 'skills.empty_chain must exist');
+  assert.strictEqual(e.valid, true);
+  assert.strictEqual(e.count, 0);
+  assert.deepStrictEqual(e.ordered, []);
+  assert.strictEqual(e.override_applied, false);
+  assert.strictEqual(e.requires_override, false);
+});
+
+// C50: resolver guard errors exact
+test('C50 resolver guard errors exact', () => {
+  const g = policy.skills.guard_errors;
+  assert.ok(g, 'skills.guard_errors must exist');
+  assert.strictEqual(g.invalid_input, 'SKILL_INVALID_INPUT');
+  assert.strictEqual(g.override_forbidden, 'SKILL_OVERRIDE_FORBIDDEN');
+  const decisionCodes = Object.values(policy.skills.errors);
+  assert.ok(!decisionCodes.includes('SKILL_INVALID_INPUT'), 'Guard errors must stay separate from chain decision errors');
+  assert.ok(!decisionCodes.includes('SKILL_OVERRIDE_FORBIDDEN'), 'Guard errors must stay separate from chain decision errors');
+  assert.strictEqual(policy.skills.errors.chain_requires_override, 'SKILL_CHAIN_REQUIRES_OVERRIDE');
+  assert.strictEqual(policy.skills.errors.chain_limit_exceeded, 'SKILL_CHAIN_LIMIT_EXCEEDED');
+  assert.strictEqual(policy.skills.errors.conflict, 'SKILL_CONFLICT');
+});
+
+// C51: implementation-status parity exact
+test('C51 implementation-status parity exact', () => {
+  const markers = ['CONTRACT LOCKED', 'COMPONENTS IMPLEMENTED', 'INTEGRATION PENDING', '#14'];
+  for (const marker of markers) {
+    assert.ok(contractDoc.includes(marker), `Contract must contain ${marker}`);
+    assert.ok(archDoc.includes(marker), `Architecture must contain ${marker}`);
+  }
+  assert.ok(!contractDoc.includes('NOT YET IMPLEMENTED'), 'Contract must not claim NOT YET IMPLEMENTED');
+  assert.ok(!archDoc.includes('NOT YET IMPLEMENTED'), 'Architecture must not claim NOT YET IMPLEMENTED');
+  assert.ok(archDoc.includes('7/7'), 'Architecture must record component runner verification 7/7');
+  assert.ok(archDoc.includes('#15'), 'Architecture must record #15 acceptance pending');
 });
 
 // Summary

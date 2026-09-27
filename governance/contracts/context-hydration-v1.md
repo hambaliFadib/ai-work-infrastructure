@@ -1,7 +1,7 @@
 # Context Hydration v1 — Governance Contract
 
-**Status:** TARGET — CONTRACT LOCKED
-**Implementation:** NOT YET IMPLEMENTED
+**Status:** CONTRACT LOCKED
+**Implementation:** COMPONENTS IMPLEMENTED — INTEGRATION PENDING (#14)
 **Policy:** context-hydration@1.0.1
 **Policy ID:** context-hydration
 **Policy Version:** 1.0.1
@@ -499,3 +499,108 @@ Hard-limit evaluation MUST take precedence over override-required evaluation. Th
 | #13 (9A-06) | Skill Resolver |
 | #14 (9A-07) | Integration |
 | #15 (9A-08) | Acceptance Closure |
+
+---
+
+## 14. Pre-Integration Semantics Lock (D1–D7)
+
+> These pre-integration clarifications formalize already-implemented behavior and do not change runtime semantics under policy 1.0.1.
+
+This section is a non-behavior-changing governance clarification resolving normative gaps D1–D7 before #14 (integration) may proceed. Runtime behavior is already merged and verified (component runner 7/7). Any required runtime behavior change invalidates this section's assumptions and requires STOP + a separate policy-version decision.
+
+### 14.1 D1 — Knowledge Dedup Identity
+
+Duplicate retrieved knowledge identity is the pair `(source_type, source_id)`. Both components are required non-empty strings. `source_id` alone is NOT the identity.
+
+- Malformed identity: fail closed.
+- When duplicate candidate identities occur in deterministic ranked input: keep the first occurrence. Because upstream input is ranked, this preserves the highest-ranked duplicate.
+- Mandatory context is outside this dedup process.
+- Machine policy: `budget.dedup`.
+
+### 14.2 D2 — Retrieval Fitting Order
+
+Retrieval-budget fitting is deterministic ranked-order greedy skip-and-continue:
+
+1. Input candidate order is already deterministic ranked order.
+2. Candidate is atomic.
+3. If `estimated_tokens <= remaining_tokens`: retrieve it.
+4. Otherwise: omit it.
+5. Continue evaluating later candidates against the remaining budget.
+6. Never reorder candidates.
+7. Never solve a packing/knapsack optimization.
+8. Never split/truncate candidate content to force it to fit.
+
+This matches the merged `applyRetrievalBudget()` behavior exactly. Machine policy: `budget.retrieval_fitting`.
+
+### 14.3 D3 — Conflict Precedence
+
+A validated `CONFLICTING` skill record fails the chain with `SKILL_CONFLICT` before:
+
+- duplicate identity collapse;
+- hard-chain-limit evaluation;
+- override-required evaluation.
+
+This does not change the existing rule that hard-limit precedes override-required. Both rules coexist:
+
+```
+conflict
+    ↓
+dedup
+    ↓
+hard limit
+    ↓
+override requirement
+```
+
+Protected override boundary checks and structural validation remain earlier fail-closed guards. Machine policy: `skills.decision_rules.conflict_precedes_chain_limits`.
+
+### 14.4 D4 — Duplicate skill_id Semantics
+
+Skill Resolver duplicate identity is `skill_id`. For duplicate `skill_id` records:
+
+- first occurrence retains `class`;
+- first occurrence retains `phase`;
+- `explicit` becomes logical OR across all occurrences;
+- first-occurrence input position is preserved;
+- conflict detection occurs BEFORE duplicate collapse.
+
+Therefore, if any duplicate occurrence is class `CONFLICTING`, the chain fails with `SKILL_CONFLICT` before collapse. Machine policy: `skills.duplicate_resolution`.
+
+### 14.5 D5 — Empty Skill Chain
+
+An otherwise-valid empty chain is a valid no-op. For `skills = []`:
+
+- `count = 0`
+- `ordered = []`
+- `override_applied = false`
+
+provided no structural/protected-override validation fails. An empty chain does NOT require an override. This behavior is distinct from S01, which tests a one-skill match. Machine policy: `skills.empty_chain`.
+
+### 14.6 D6 — Resolver Guard Errors
+
+The policy decision errors remain:
+
+- `SKILL_CHAIN_REQUIRES_OVERRIDE`
+- `SKILL_CHAIN_LIMIT_EXCEEDED`
+- `SKILL_CONFLICT`
+
+Resolver-level fail-closed guard errors are formalized separately:
+
+- `SKILL_INVALID_INPUT` — used for malformed resolver structures/records/flags that cannot safely enter policy decision evaluation.
+- `SKILL_OVERRIDE_FORBIDDEN` — used when `override_request` contains any truthy attempted override. Skills may never override runtime policy, permissions, or security constraints. Unknown truthy override keys also fail closed because they cannot be verified safe.
+
+Guard errors are not chain decision outcomes. Machine policy: `skills.guard_errors`.
+
+### 14.7 D7 — Implementation Status
+
+Status: CONTRACT LOCKED
+Implementation: COMPONENTS IMPLEMENTED — INTEGRATION PENDING (#14)
+
+- Objective Parser implemented
+- Ranking implemented
+- Retrieval/Eligibility implemented
+- Budget/ContextPackage implemented
+- Skill Resolver implemented
+- Component runner verified 7/7
+- Complete pipeline assembly still pending #14
+- Acceptance 37/37 still pending #15
