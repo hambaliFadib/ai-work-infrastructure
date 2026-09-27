@@ -119,8 +119,13 @@ class ContextPackageError extends Error {
   }
 }
 
-/** Strict RFC3339 UTC timestamp pattern: ...Z only, optional milliseconds. */
-const RFC3339_UTC_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/;
+/**
+ * Strict RFC3339 UTC timestamp pattern — canonical project form only:
+ * `YYYY-MM-DDTHH:MM:SS[.fraction]Z` with uppercase T/Z and no offset.
+ * Fractional seconds are `1*DIGIT` (arbitrary precision), matching the
+ * Ranking lane parser, so the same hydration_started_at is accepted by both.
+ */
+const RFC3339_UTC_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z$/;
 
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
@@ -133,20 +138,51 @@ function daysInMonth(year, month) {
   return DAYS_IN_MONTH[month - 1];
 }
 
+/** Days since 1970-01-01 for a proleptic Gregorian civil date. */
+function daysFromCivil(year, month, day) {
+  const y = month <= 2 ? year - 1 : year;
+  const era = Math.floor(y / 400);
+  const yoe = y - era * 400;
+  const doy = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+  const doe = yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy;
+  return era * 146097 + doe - 719468;
+}
+
+/** Civil date from days since 1970-01-01 (inverse of daysFromCivil). */
+function civilFromDays(days) {
+  const z = days + 719468n;
+  const era = (z >= 0n ? z : z - 146096n) / 146097n;
+  const doe = z - era * 146097n;
+  const yoe = (doe - doe / 1460n + doe / 36524n - doe / 146096n) / 365n;
+  const year = yoe + era * 400n;
+  const doy = doe - (365n * yoe + yoe / 4n - yoe / 100n);
+  const mp = (5n * doy + 2n) / 153n;
+  const day = doy - (153n * mp + 2n) / 5n + 1n;
+  const month = mp + (mp < 10n ? 3n : -9n);
+  return {
+    year: year + (month <= 2n ? 1n : 0n),
+    month,
+    day,
+  };
+}
+
 /**
- * Parse an RFC3339 UTC timestamp to epoch milliseconds.
+ * Parse an RFC3339 UTC timestamp to an exact representation:
+ *   { seconds: BigInt, fractionDigits: string }
+ * where `seconds` is Unix epoch seconds and `fractionDigits` is the exact
+ * fractional-second digit string as written (empty when absent).
  * Returns null when the value is not a valid RFC3339 UTC timestamp.
  *
  * Strict validation: the value must match the RFC3339 UTC syntax AND carry
  * real calendar/time components. `Date.parse` alone is insufficient because
  * it normalizes syntactically shaped but invalid dates (for example
- * `2026-02-30T00:00:00Z` becomes March 2), which would silently retain an
- * invalid anchor while expiry arithmetic used a different normalized
- * instant. Components are therefore validated before Date.parse is used as
- * the epoch computation.
+ * `2026-02-30T00:00:00Z` becomes March 2), and it reduces fractional seconds
+ * to milliseconds. Epoch seconds are therefore computed exactly from the
+ * validated components, and the full fractional digit string is preserved
+ * (RFC3339 fractional seconds are `1*DIGIT`).
  *
- * Leap seconds (second = 60) are not representable in the epoch-millisecond
- * model and are deterministically rejected.
+ * Leap seconds (second = 60) are not representable and are deterministically
+ * rejected.
  *
  * Deterministic: relies only on the string value, never on wall clock.
  */
@@ -163,24 +199,69 @@ function parseRfc3339Utc(value) {
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > daysInMonth(year, month)) return null;
   if (hour > 23 || minute > 59 || second > 59) return null;
-  const epochMs = Date.parse(value);
-  if (Number.isNaN(epochMs)) return null;
-  return epochMs;
+  const days = daysFromCivil(year, month, day);
+  const seconds = BigInt(days) * 86400n + BigInt(hour * 3600 + minute * 60 + second);
+  return { seconds, fractionDigits: match[7] || '' };
 }
 
 /**
- * expires_at = omitted_at + seconds (exact arithmetic on epoch ms).
+ * Compare two parsed timestamps chronologically with full fractional
+ * precision: -1 | 0 | 1. Instants written at different precisions but with
+ * equal value (`.1Z` vs `.100000Z`) compare equal.
+ */
+function compareRfc3339Parsed(a, b) {
+  if (a.seconds !== b.seconds) return a.seconds < b.seconds ? -1 : 1;
+  const length = Math.max(a.fractionDigits.length, b.fractionDigits.length);
+  const aFraction = a.fractionDigits.padEnd(length, '0');
+  const bFraction = b.fractionDigits.padEnd(length, '0');
+  if (aFraction === bFraction) return 0;
+  return aFraction < bFraction ? -1 : 1;
+}
+
+/**
+ * Render a parsed timestamp back to canonical RFC3339 UTC. Explicit fractional
+ * digits are preserved verbatim (any precision); timestamps without a
+ * fractional component render with the canonical millisecond form `.000`
+ * (preserving prior behavior).
+ */
+function formatRfc3339Utc(parsed) {
+  const days = parsed.seconds >= 0n
+    ? parsed.seconds / 86400n
+    : (parsed.seconds - 86399n) / 86400n;
+  const secondsOfDay = parsed.seconds - days * 86400n;
+  const civil = civilFromDays(days);
+  const hour = secondsOfDay / 3600n;
+  const minute = (secondsOfDay % 3600n) / 60n;
+  const second = secondsOfDay % 60n;
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const pad4 = (n) => String(n).padStart(4, '0');
+  const fractionDigits = parsed.fractionDigits.length === 0 ? '000' : parsed.fractionDigits;
+  return (
+    `${pad4(civil.year)}-${pad2(civil.month)}-${pad2(civil.day)}` +
+    `T${pad2(hour)}:${pad2(minute)}:${pad2(second)}.${fractionDigits}Z`
+  );
+}
+
+/**
+ * expires_at = omitted_at + seconds (exact arithmetic on epoch seconds).
+ * The exact fractional component of the anchor is preserved at full
+ * precision; anchors without a fractional component render with the
+ * canonical `.000` millisecond form.
  * Returns null when the anchor is not a valid RFC3339 UTC timestamp.
  */
 function addSeconds(rfc3339Utc, seconds) {
-  const epochMs = parseRfc3339Utc(rfc3339Utc);
-  if (epochMs === null) return null;
-  return new Date(epochMs + seconds * 1000).toISOString();
+  const parsed = parseRfc3339Utc(rfc3339Utc);
+  if (parsed === null) return null;
+  return formatRfc3339Utc({
+    seconds: parsed.seconds + BigInt(seconds),
+    fractionDigits: parsed.fractionDigits,
+  });
 }
 
 /**
  * Policy 1.0.1 expiry boundary: retention_current_time >= expires_at means
- * the record is EXPIRED. Both times are RFC3339 UTC strings.
+ * the record is EXPIRED. Both times are RFC3339 UTC strings compared with
+ * full fractional precision (never reduced to milliseconds).
  */
 function isExpired(record, retentionCurrentTime) {
   if (record === null || typeof record !== 'object') {
@@ -189,21 +270,21 @@ function isExpired(record, retentionCurrentTime) {
       'omission metadata must be a plain object'
     );
   }
-  const currentMs = parseRfc3339Utc(retentionCurrentTime);
-  if (currentMs === null) {
+  const current = parseRfc3339Utc(retentionCurrentTime);
+  if (current === null) {
     throw new ContextPackageError(
       PACKAGE_ERROR_CODES.INVALID_RETENTION_TIME,
       'retention_current_time must be an RFC3339 UTC timestamp'
     );
   }
-  const expiresMs = parseRfc3339Utc(record.expires_at);
-  if (expiresMs === null) {
+  const expires = parseRfc3339Utc(record.expires_at);
+  if (expires === null) {
     throw new ContextPackageError(
       PACKAGE_ERROR_CODES.INVALID_OMISSION_METADATA,
       'record.expires_at must be an RFC3339 UTC timestamp'
     );
   }
-  return currentMs >= expiresMs;
+  return compareRfc3339Parsed(current, expires) >= 0;
 }
 
 /**
@@ -356,15 +437,19 @@ function assertAllowedOmissionMetadata(record) {
       'estimated_tokens must be a non-negative integer'
     );
   }
-  const omittedMs = parseRfc3339Utc(record.omitted_at);
-  const expiresMs = parseRfc3339Utc(record.expires_at);
-  if (omittedMs === null || expiresMs === null) {
+  const omitted = parseRfc3339Utc(record.omitted_at);
+  const expires = parseRfc3339Utc(record.expires_at);
+  if (omitted === null || expires === null) {
     throw new ContextPackageError(
       PACKAGE_ERROR_CODES.INVALID_OMISSION_METADATA,
       'omitted_at and expires_at must be RFC3339 UTC timestamps'
     );
   }
-  if (expiresMs - omittedMs !== RETENTION_SECONDS * 1000) {
+  const expectedExpires = {
+    seconds: omitted.seconds + BigInt(RETENTION_SECONDS),
+    fractionDigits: omitted.fractionDigits,
+  };
+  if (compareRfc3339Parsed(expires, expectedExpires) !== 0) {
     throw new ContextPackageError(
       PACKAGE_ERROR_CODES.INVALID_OMISSION_METADATA,
       'expires_at must equal omitted_at + 2592000 seconds'

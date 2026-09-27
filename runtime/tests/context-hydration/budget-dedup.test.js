@@ -48,6 +48,7 @@ const {
   BUDGET_AUDIT_FIELDS,
   OMISSION_ALLOWED_METADATA,
   parseRfc3339Utc,
+  addSeconds,
   isExpired,
   createOmissionMetadata,
   assertAllowedOmissionMetadata,
@@ -1068,6 +1069,126 @@ test('BD49 objective secret failure also leaves the store unchanged', () => {
     (e) => e instanceof ContextPackageError && e.code === 'INVALID_CONTEXT_PACKAGE'
   );
   assert.strictEqual(store.size(HYDRATION_STARTED_AT), before);
+});
+
+// ---------------------------------------------------------------------------
+// Review corrections — R2 RFC3339 fractional-precision parity
+// ---------------------------------------------------------------------------
+
+// BD50: arbitrary RFC3339 fractional precision is accepted (1*DIGIT)
+test('BD50 arbitrary RFC3339 fractional precision accepted', () => {
+  const valid = [
+    '2026-09-27T00:00:00Z',                    // no fractional seconds
+    '2026-09-27T00:00:00.1Z',                  // 1 digit
+    '2026-09-27T00:00:00.12Z',                 // 2 digits
+    '2026-09-27T00:00:00.123Z',                // 3 digits
+    '2026-09-27T00:00:00.123456Z',             // 6 digits
+    '2026-09-27T00:00:00.123456789Z',          // 9 digits
+    '2026-09-27T00:00:00.123456789012345Z',    // 15 digits
+  ];
+  for (const value of valid) {
+    assert.notStrictEqual(parseRfc3339Utc(value), null, `${value} must be accepted`);
+  }
+  // Calendar validity still applies to fractional timestamps.
+  assert.strictEqual(parseRfc3339Utc('2026-02-30T00:00:00.123456Z'), null);
+  assert.strictEqual(parseRfc3339Utc('2026-13-01T00:00:00.1Z'), null);
+  // The anchor is accepted end-to-end without precision loss.
+  const pkg = buildContextPackage(
+    packageParams({ hydration_started_at: '2026-09-27T00:00:00.123456789Z' })
+  );
+  assert.strictEqual(pkg.hydration_started_at, '2026-09-27T00:00:00.123456789Z');
+});
+
+// BD51: exact 30-day expiry preserves the exact fractional component
+test('BD51 30-day expiry preserves the exact fractional component', () => {
+  const cases = [
+    ['2026-09-27T10:00:00.1Z', '2026-10-27T10:00:00.1Z'],
+    ['2026-09-27T10:00:00.123Z', '2026-10-27T10:00:00.123Z'],
+    ['2026-09-27T10:00:00.123456Z', '2026-10-27T10:00:00.123456Z'],
+    ['2026-09-27T10:00:00.123456789Z', '2026-10-27T10:00:00.123456789Z'],
+  ];
+  for (const [anchor, expected] of cases) {
+    assert.strictEqual(addSeconds(anchor, RETENTION_SECONDS), expected);
+    const metadata = createOmissionMetadata(
+      { source_id: 'src', source_type: 'curated', estimated_tokens: 5 },
+      { hydration_run_id: 'run-1', hydration_started_at: anchor, omission_reason: 'retrieval_budget_exceeded' }
+    );
+    assert.strictEqual(metadata.omitted_at, anchor);
+    assert.strictEqual(metadata.expires_at, expected);
+  }
+  // Anchors without a fractional component keep the canonical `.000` form.
+  const noFraction = createOmissionMetadata(
+    { source_id: 'src', source_type: 'curated', estimated_tokens: 5 },
+    { hydration_run_id: 'run-1', hydration_started_at: '2026-09-27T10:00:00Z', omission_reason: 'retrieval_budget_exceeded' }
+  );
+  assert.strictEqual(noFraction.expires_at, '2026-10-27T10:00:00.000Z');
+});
+
+// BD52: different precision representing the same instant compares equal
+test('BD52 equal instants at different precision compare equal', () => {
+  const metadata = createOmissionMetadata(
+    { source_id: 'src', source_type: 'curated', estimated_tokens: 5 },
+    { hydration_run_id: 'run-1', hydration_started_at: '2026-09-27T10:00:00.1Z', omission_reason: 'retrieval_budget_exceeded' }
+  );
+  // expires_at = '2026-10-27T10:00:00.1Z'; `.100000Z` is the same instant.
+  assert.strictEqual(isExpired(metadata, '2026-10-27T10:00:00.100000Z'), true);
+  assert.strictEqual(isExpired(metadata, '2026-10-27T10:00:00.099999Z'), false);
+  assert.strictEqual(isExpired(metadata, '2026-10-27T10:00:00.100001Z'), true);
+  // The allowlist validator accepts an equivalent instant at higher precision.
+  assert.doesNotThrow(() =>
+    assertAllowedOmissionMetadata({ ...metadata, expires_at: '2026-10-27T10:00:00.100000Z' })
+  );
+});
+
+// BD53: retention boundary comparison below millisecond precision
+test('BD53 retention boundary below millisecond precision', () => {
+  const record = {
+    source_id: 'src',
+    source_type: 'curated',
+    scope: 'global',
+    score: 0.5,
+    rank: 1,
+    omission_reason: 'retrieval_budget_exceeded',
+    estimated_tokens: 5,
+    hydration_run_id: 'run-1',
+    omitted_at: '2026-09-27T10:00:00.123456Z',
+    expires_at: '2026-10-27T10:00:00.123456Z',
+  };
+  assert.doesNotThrow(() => assertAllowedOmissionMetadata(record));
+  assert.strictEqual(isExpired(record, '2026-10-27T10:00:00.123455Z'), false); // just before
+  assert.strictEqual(isExpired(record, '2026-10-27T10:00:00.123456Z'), true);  // exact boundary
+  assert.strictEqual(isExpired(record, '2026-10-27T10:00:00.123457Z'), true);  // just after
+});
+
+// BD54: fractional anchor preserved end-to-end through build and store reads
+test('BD54 fractional anchor preserved end-to-end', () => {
+  const store = createOmissionStore();
+  const pkg = buildContextPackage(
+    packageParams({
+      hydration_started_at: '2026-09-27T10:00:00.123456Z',
+      candidates: [candidate({ source_id: 'big', estimated_tokens: 999999 })],
+      omission_store: store,
+    })
+  );
+  assert.strictEqual(pkg.hydration_started_at, '2026-09-27T10:00:00.123456Z');
+  assert.strictEqual(pkg.omitted[0].omitted_at, '2026-09-27T10:00:00.123456Z');
+  assert.strictEqual(pkg.omitted[0].expires_at, '2026-10-27T10:00:00.123456Z');
+  // Full-precision retention: active one microsecond before the boundary...
+  assert.strictEqual(store.list('2026-10-27T10:00:00.123455Z').length, 1);
+  // ...and purged at the exact boundary.
+  assert.deepStrictEqual(store.list('2026-10-27T10:00:00.123456Z'), []);
+  assert.strictEqual(store.size('2026-10-27T10:00:00.123456Z'), 0);
+});
+
+// BD55: parser keeps an exact (seconds, fractionDigits) representation
+test('BD55 parser preserves exact seconds and fraction digits', () => {
+  const parsed = parseRfc3339Utc('2026-09-27T10:00:00.123456Z');
+  assert.notStrictEqual(parsed, null);
+  assert.strictEqual(parsed.seconds, BigInt(Date.UTC(2026, 8, 27, 10, 0, 0) / 1000));
+  assert.strictEqual(parsed.fractionDigits, '123456');
+  const noFraction = parseRfc3339Utc('2026-09-27T10:00:00Z');
+  assert.strictEqual(noFraction.seconds, parsed.seconds);
+  assert.strictEqual(noFraction.fractionDigits, '');
 });
 
 // ---------------------------------------------------------------------------
