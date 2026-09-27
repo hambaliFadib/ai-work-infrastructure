@@ -446,6 +446,199 @@ test('RP36 rankCandidates rejects a non-array candidates container', () => {
   );
 });
 
+// --- Review regression tests (9A-03-R) ---
+
+// RP37: exact half-up on the known failing case (review 4114876073)
+test('RP37 exact half-up known regression: 0.3328125 -> 0.332813', () => {
+  assert.strictEqual(
+    policy.totalScore({ semantic_relevance: 1 / 64, scope_specificity: 0.75, authority: 0.50, recency: 0.75 }),
+    0.332813
+  );
+});
+
+// RP38: known half-micro case through the full ranking path (review 4114876073)
+test('RP38 known half-micro case through rankCandidates', () => {
+  const fillers = Array.from({ length: 63 }, (_, i) => `g${i + 1}`);
+  const input = {
+    objective_retrieval_terms: ['x'],
+    candidates: [{
+      source_id: 'half-micro',
+      source_type: 'semantic_memory',
+      scope: 'job',
+      session_id: null,
+      job_id: 'job-1',
+      updated_at: '2026-09-25T00:00:00Z', // 2 days before ANCHOR -> recency 0.75
+      retrieval_terms: ['x', ...fillers], // Jaccard = 1/64
+    }],
+    active_job_id: 'job-1',
+    active_session_id: 'sess-1',
+    hydration_started_at: ANCHOR,
+  };
+  const result = policy.rankCandidates(input);
+  assert.strictEqual(result.ranked[0].semantic_relevance, 0.015625);
+  assert.strictEqual(result.ranked[0].scope_specificity, 0.75);
+  assert.strictEqual(result.ranked[0].authority, 0.50);
+  assert.strictEqual(result.ranked[0].recency, 0.75);
+  assert.strictEqual(result.ranked[0].total_score, 0.332813);
+});
+
+// RP39: half-micro below / exact / just above the quantization boundary
+test('RP39 half-micro below, exact, and just above', () => {
+  const factors = (semantic) => ({ semantic_relevance: semantic, scope_specificity: 0.75, authority: 0.50, recency: 0.75 });
+  // exact half-micro: raw = 0.3328125 exactly -> rounds up
+  assert.strictEqual(policy.totalScore(factors(1 / 64)), 0.332813);
+  // half-micro below: raw = 0.3328124 -> rounds down
+  assert.strictEqual(policy.totalScore(factors(0.0156248)), 0.332812);
+  // just above: raw = 0.3328126 -> rounds up
+  assert.strictEqual(policy.totalScore(factors(0.0156252)), 0.332813);
+  // semantic-only family around a different half-micro boundary
+  assert.strictEqual(policy.totalScore({ semantic_relevance: 0.015625, scope_specificity: 0, authority: 0, recency: 0 }), 0.007813);
+  assert.strictEqual(policy.totalScore({ semantic_relevance: 0.015624999, scope_specificity: 0, authority: 0, recency: 0 }), 0.007812);
+  assert.strictEqual(policy.totalScore({ semantic_relevance: 0.015625001, scope_specificity: 0, authority: 0, recency: 0 }), 0.007813);
+});
+
+// RP40: nearby ordering candidates — exact quantized total decides ordering
+test('RP40 nearby candidates order by exact quantized total', () => {
+  const objectiveTerms = Array.from({ length: 128 }, (_, i) => `s${i + 1}`);
+  const shared = objectiveTerms.slice(0, 127);
+  const fillers = Array.from({ length: 8128 - 127 }, (_, i) => `f${i + 1}`);
+  const input = {
+    objective_retrieval_terms: objectiveTerms,
+    candidates: [
+      {
+        // Jaccard = 2/128 = 1/64 -> exact raw 0.3328125 -> 0.332813
+        source_id: 'a-known',
+        source_type: 'semantic_memory',
+        scope: 'job',
+        session_id: null,
+        job_id: 'job-1',
+        updated_at: '2026-09-25T00:00:00Z',
+        retrieval_terms: objectiveTerms.slice(0, 2),
+      },
+      {
+        // Jaccard = 127/8129 -> exact raw 0.3328115... -> 0.332812
+        source_id: 'b-nearby',
+        source_type: 'semantic_memory',
+        scope: 'job',
+        session_id: null,
+        job_id: 'job-1',
+        updated_at: '2026-09-25T01:00:00Z', // newer than a-known, same recency bucket
+        retrieval_terms: [...shared, ...fillers],
+      },
+    ],
+    active_job_id: 'job-1',
+    active_session_id: 'sess-1',
+    hydration_started_at: ANCHOR,
+  };
+  const result = policy.rankCandidates(input);
+  assert.deepStrictEqual(result.ranked.map((r) => r.source_id), ['a-known', 'b-nearby']);
+  assert.strictEqual(result.ranked[0].total_score, 0.332813);
+  assert.strictEqual(result.ranked[1].total_score, 0.332812);
+});
+
+// RP41: fractional-second tie-break precision (review 4114876075)
+test('RP41 tie-break retains sub-millisecond precision', () => {
+  const newer = { total_score: 0.5, scope_specificity: 0.5, authority: 0.5, updated_at: '2026-09-27T00:00:00.0009Z', source_id: 'z' };
+  const older = { total_score: 0.5, scope_specificity: 0.5, authority: 0.5, updated_at: '2026-09-27T00:00:00.0001Z', source_id: 'a' };
+  assert.ok(policy.compareScoredCandidates(newer, older) < 0, '.0009Z must precede .0001Z despite source_id order');
+  assert.ok(policy.compareScoredCandidates(older, newer) > 0, 'comparator must be antisymmetric');
+
+  // Equal instants at different precision fall through to source_id ASC.
+  const precise = { total_score: 0.5, scope_specificity: 0.5, authority: 0.5, updated_at: '2026-09-27T00:00:00.500000Z', source_id: 'a' };
+  const short = { total_score: 0.5, scope_specificity: 0.5, authority: 0.5, updated_at: '2026-09-27T00:00:00.5Z', source_id: 'b' };
+  assert.ok(policy.compareScoredCandidates(precise, short) < 0, 'equal instants fall through to source_id ASC');
+
+  // End-to-end: rankCandidates orders by fractional updated_at.
+  const input = {
+    objective_retrieval_terms: ['alpha'],
+    candidates: [
+      { source_id: 'z-lane', source_type: 'curated', scope: 'global', session_id: null, job_id: null, updated_at: '2026-09-27T00:00:00.0009Z', retrieval_terms: ['alpha'] },
+      { source_id: 'a-lane', source_type: 'curated', scope: 'global', session_id: null, job_id: null, updated_at: '2026-09-27T00:00:00.0001Z', retrieval_terms: ['alpha'] },
+    ],
+    active_job_id: 'job-1',
+    active_session_id: 'sess-1',
+    hydration_started_at: ANCHOR,
+  };
+  const result = policy.rankCandidates(input);
+  assert.deepStrictEqual(result.ranked.map((r) => r.source_id), ['z-lane', 'a-lane']);
+});
+
+// RP42: recency boundaries with fractional seconds
+test('RP42 recency retains fractional-second precision at boundaries', () => {
+  // age = 86400.0009s -> just over one day -> 0.75
+  assert.strictEqual(policy.recencyScore('2026-09-25T23:59:59.9991Z', ANCHOR), 0.75);
+  // age = 86399.9999s -> within one day -> 1.00
+  assert.strictEqual(policy.recencyScore('2026-09-26T00:00:00.0001Z', ANCHOR), 1.00);
+  // age = 0 exactly (same instant, explicit zero fraction) -> 1.00
+  assert.strictEqual(policy.recencyScore('2026-09-27T00:00:00.000Z', ANCHOR), 1.00);
+});
+
+// RP43: strict RFC3339 UTC syntax rejection (review 4114876078)
+test('RP43 rejects non-RFC3339-UTC timestamp syntax', () => {
+  const invalidSyntax = [
+    '2026-09-27',
+    '09/27/2026',
+    '2026-09-27T00:00:00',
+    '2026-09-27T00:00:00+07:00',
+    '2026-09-27T00:00:00+00:00',
+    '2026-09-27T00:00:00-00:00',
+    '2026-09-27 00:00:00Z',
+    '2026-9-27T00:00:00Z',
+    '2026-09-27T0:00:00Z',
+    '2026-09-27T00:00:00.Z',
+    '2026-09-27T00:00:00Z ',
+    'not-a-date',
+    '',
+  ];
+  for (const value of invalidSyntax) {
+    assert.throws(() => policy.recencyScore(value, ANCHOR), TypeError, `anchor-side accept: ${value}`);
+    assert.throws(() => policy.recencyScore(ANCHOR, value), TypeError, `updated-side accept: ${value}`);
+  }
+});
+
+// RP44: RFC3339 UTC calendar validity (review 4114876078)
+test('RP44 rejects invalid calendar values, accepts valid ones', () => {
+  const invalidCalendar = [
+    '2026-02-30T00:00:00Z', // February 30
+    '2026-02-29T00:00:00Z', // 2026 is not a leap year
+    '2025-02-29T00:00:00Z',
+    '2026-04-31T00:00:00Z',
+    '2026-09-31T00:00:00Z',
+    '2026-13-01T00:00:00Z',
+    '2026-00-10T00:00:00Z',
+    '2026-09-00T00:00:00Z',
+    '2026-09-27T24:00:00Z',
+    '2026-09-27T00:60:00Z',
+    '2026-09-27T00:00:60Z',
+  ];
+  for (const value of invalidCalendar) {
+    assert.throws(() => policy.recencyScore(value, ANCHOR), TypeError, `calendar accept: ${value}`);
+  }
+
+  // Valid leap day is accepted.
+  assert.strictEqual(policy.recencyScore('2024-02-29T00:00:00Z', '2024-03-01T00:00:00Z'), 1.00);
+
+  // The same strict parser guards candidate.updated_at and hydration_started_at.
+  const badCandidate = {
+    source_id: 'bad-date', source_type: 'curated', scope: 'global',
+    session_id: null, job_id: null, updated_at: '2026-02-30T00:00:00Z', retrieval_terms: [],
+  };
+  assert.throws(() => policy.rankCandidates({
+    objective_retrieval_terms: [],
+    candidates: [badCandidate],
+    active_job_id: 'job-1',
+    active_session_id: 'sess-1',
+    hydration_started_at: ANCHOR,
+  }), TypeError);
+  assert.throws(() => policy.rankCandidates({
+    objective_retrieval_terms: [],
+    candidates: [{ ...badCandidate, updated_at: ANCHOR }],
+    active_job_id: 'job-1',
+    active_session_id: 'sess-1',
+    hydration_started_at: '2026-02-30T00:00:00Z',
+  }), TypeError);
+});
+
 // Summary
 console.log(`\n=== Ranking Policy Test Summary ===`);
 console.log(`Cases: ${passed + failed}, Passed: ${passed}, Failed: ${failed}`);
