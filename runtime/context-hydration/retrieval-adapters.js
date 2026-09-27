@@ -28,6 +28,8 @@
  *   - synchronous, deterministic, side-effect free
  *   - must not perform secret/env reads or network/DB access
  *   - returned records are treated as immutable inputs and never mutated
+ *   - for raw_source, returned records are additionally filtered to the
+ *     explicitly requested source_ids before being exposed
  *
  * Ordering: results follow the fixed source order below; candidates are
  * concatenated in that order, preserving each provider's internal order.
@@ -130,13 +132,23 @@ function createRetrievalAdapter(sourceType, provider) {
       if (!Array.isArray(result)) {
         throw new Error(`Retrieval provider for ${sourceType} must return an array`);
       }
+      let candidates = result.map((candidate) => stampCandidate(candidate, sourceType));
+      if (access === ACCESS_MODES.EXPLICIT) {
+        // Explicit-access boundary (defense in depth, mirroring the
+        // eligibility gate): only records whose source_id was explicitly
+        // requested are exposed, even when the provider returns more.
+        const requestedIds = new Set(context.raw_source_request.source_ids);
+        candidates = candidates.filter(
+          (candidate) => isPlainRecord(candidate) && requestedIds.has(candidate.source_id)
+        );
+      }
       return {
         source_type: sourceType,
         access,
         invoked: true,
         unavailable: false,
         skipped_reason: null,
-        candidates: result.map((candidate) => stampCandidate(candidate, sourceType)),
+        candidates,
       };
     },
   });

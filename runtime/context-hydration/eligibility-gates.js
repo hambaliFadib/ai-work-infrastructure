@@ -134,13 +134,15 @@ function makeDecision(candidate, sourceId, sourceType, eligible, advisory, reaso
 }
 
 /**
- * Evaluate a single candidate. `context` may be raw or pre-normalized and
- * `level` is optional (classified from context when omitted).
+ * Evaluate a single candidate. `context` may be raw or pre-normalized.
+ * The confidence level is ALWAYS derived from context.objective_confidence;
+ * there is no override path, so malformed or extra arguments cannot bypass
+ * the LOW-confidence mandatory-only gate (fail closed).
  * Never mutates the candidate or the context.
  */
-function evaluateCandidate(candidate, context, level) {
+function evaluateCandidate(candidate, context) {
   const ctx = normalizeContext(context);
-  const resolvedLevel = level === undefined ? classifyConfidence(ctx.objective_confidence) : level;
+  const level = classifyConfidence(ctx.objective_confidence);
 
   // 1. Shape validation — fail closed.
   if (!isPlainRecord(candidate)) {
@@ -166,7 +168,7 @@ function evaluateCandidate(candidate, context, level) {
   // 3. LOW confidence — mandatory context only; all candidate retrieval is
   // disabled, including explicit raw requests (contract section 6:
   // "Mandatory context only").
-  if (resolvedLevel === CONFIDENCE_LEVELS.LOW) {
+  if (level === CONFIDENCE_LEVELS.LOW) {
     return makeDecision(candidate, sourceId, sourceType, false, false, REASONS.LOW_CONFIDENCE_MANDATORY_ONLY);
   }
 
@@ -210,7 +212,7 @@ function evaluateEligibility(candidates, context) {
   const eligible = [];
   const rejected = [];
   for (const candidate of candidates) {
-    const decision = evaluateCandidate(candidate, ctx, level);
+    const decision = evaluateCandidate(candidate, ctx);
     decisions.push(decision);
     if (decision.eligible) {
       eligible.push(decision);

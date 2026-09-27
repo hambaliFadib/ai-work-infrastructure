@@ -576,17 +576,53 @@ test('T37 retrieval + eligibility chain enforces all boundaries together', () =>
 });
 
 test('T38 single-candidate evaluation primitive works standalone', () => {
-  const eligible = evaluateCandidate(candidate({ source_id: 'cur-1' }), context({}), CONFIDENCE_LEVELS.HIGH);
+  const eligible = evaluateCandidate(candidate({ source_id: 'cur-1' }), context({}));
   assert.strictEqual(eligible.eligible, true);
   assert.strictEqual(eligible.reason, REASONS.ELIGIBLE);
 
   const rejected = evaluateCandidate(
     candidate({ source_id: 'raw-1', source_type: 'raw_source' }),
-    context({}),
-    CONFIDENCE_LEVELS.HIGH
+    context({})
   );
   assert.strictEqual(rejected.eligible, false);
   assert.strictEqual(rejected.reason, REASONS.RAW_SOURCE_EXPLICIT_ONLY);
+});
+
+test('T39 raw adapter filters out records not explicitly requested', () => {
+  const provider = spyProvider([
+    candidate({ source_id: 'raw-1', source_type: 'raw_source' }),
+    candidate({ source_id: 'raw-2', source_type: 'raw_source' }),
+    candidate({ source_id: 'raw-3', source_type: 'raw_source' }),
+  ]);
+  const adapter = createRetrievalAdapter('raw_source', provider);
+  const result = adapter.retrieve(
+    context({ raw_source_request: { explicit: true, source_ids: ['raw-1', 'raw-3'] } })
+  );
+  assert.strictEqual(result.invoked, true);
+  assert.deepStrictEqual(result.candidates.map((c) => c.source_id), ['raw-1', 'raw-3']);
+
+  const registry = createRetrievalRegistry({ raw_source: provider });
+  const out = retrieveCandidates(
+    registry,
+    context({ raw_source_request: { explicit: true, source_ids: ['raw-2'] } })
+  );
+  assert.deepStrictEqual(out.candidates.map((c) => c.source_id), ['raw-2']);
+});
+
+test('T40 malformed or extra arguments cannot bypass the LOW-confidence gate', () => {
+  const lowCtx = context({ objective_confidence: 0.2 });
+
+  const forcedHigh = evaluateCandidate(candidate({ source_id: 'cur-1' }), lowCtx, CONFIDENCE_LEVELS.HIGH);
+  assert.strictEqual(forcedHigh.eligible, false);
+  assert.strictEqual(forcedHigh.reason, REASONS.LOW_CONFIDENCE_MANDATORY_ONLY);
+
+  const malformed = evaluateCandidate(candidate({ source_id: 'cur-1' }), lowCtx, 'HIGH-TYPO');
+  assert.strictEqual(malformed.eligible, false);
+  assert.strictEqual(malformed.reason, REASONS.LOW_CONFIDENCE_MANDATORY_ONLY);
+
+  const nullLevel = evaluateCandidate(candidate({ source_id: 'cur-1' }), lowCtx, null);
+  assert.strictEqual(nullLevel.eligible, false);
+  assert.strictEqual(nullLevel.reason, REASONS.LOW_CONFIDENCE_MANDATORY_ONLY);
 });
 
 // Summary
