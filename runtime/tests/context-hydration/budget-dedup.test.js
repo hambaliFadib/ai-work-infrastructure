@@ -47,9 +47,12 @@ const {
   RETRIEVED_AUDIT_FIELDS,
   BUDGET_AUDIT_FIELDS,
   OMISSION_ALLOWED_METADATA,
+  parseRfc3339Utc,
   isExpired,
   createOmissionMetadata,
+  assertAllowedOmissionMetadata,
   createOmissionStore,
+  projectRetrievedRecord,
   buildContextPackage,
   validateContextPackage,
 } = require('../../context-hydration/context-package.js');
@@ -813,6 +816,258 @@ test('BD40 omitted metadata persisted to store matches package', () => {
   );
   const listed = store.list(HYDRATION_STARTED_AT);
   assert.deepStrictEqual(listed, pkg.omitted);
+});
+
+// ---------------------------------------------------------------------------
+// Review corrections — P1 payload preservation (thread 4114885761)
+// ---------------------------------------------------------------------------
+
+// BD41: retrieved records preserve the selected knowledge payload
+test('BD41 retrieved records preserve the selected knowledge payload', () => {
+  const payloadCandidate = candidate({
+    source_id: 'payload-1',
+    content: 'Knowledge body content',
+    body: 'Alternate body field',
+    text: 'Plain text field',
+    payload: { facts: ['a', 'b'], nested: { deep: true } },
+    estimated_tokens: 10,
+  });
+  const pkg = buildContextPackage(packageParams({ candidates: [payloadCandidate] }));
+  assert.strictEqual(pkg.retrieved.length, 1);
+  const record = pkg.retrieved[0];
+  for (const field of RETRIEVED_AUDIT_FIELDS) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(record, field),
+      `retrieved record must carry ${field}`
+    );
+  }
+  assert.strictEqual(record.content, 'Knowledge body content');
+  assert.strictEqual(record.body, 'Alternate body field');
+  assert.strictEqual(record.text, 'Plain text field');
+  assert.deepStrictEqual(record.payload, { facts: ['a', 'b'], nested: { deep: true } });
+  // Downstream usability: the knowledge remains usable, not merely audited.
+  assert.deepStrictEqual(record.payload.facts, ['a', 'b']);
+  assert.strictEqual(record.estimated_tokens, 10);
+  // Payload is copied, never aliased to the caller's candidate.
+  assert.notStrictEqual(record.payload, payloadCandidate.payload);
+  assert.strictEqual(payloadCandidate.content, 'Knowledge body content');
+  assert.strictEqual(validateContextPackage(pkg), true);
+});
+
+// BD42: audit fields are added/normalized while payload fields survive
+test('BD42 audit fields normalized over payload-supplied values', () => {
+  const pkg = buildContextPackage(
+    packageParams({
+      candidates: [
+        candidate({
+          source_id: 'norm-1',
+          reason: 'payload-supplied-reason',
+          rank: 7,
+          scope: undefined,
+          score: undefined,
+          provenance: undefined,
+          content: 'kept',
+        }),
+      ],
+    })
+  );
+  const record = pkg.retrieved[0];
+  assert.strictEqual(record.reason, 'retrieved');
+  assert.strictEqual(record.rank, 7);
+  assert.strictEqual(record.scope, null);
+  assert.strictEqual(record.score, null);
+  assert.strictEqual(record.provenance, null);
+  assert.strictEqual(record.content, 'kept');
+
+  // Direct projection primitive: never mutates the candidate.
+  const source = {
+    source_id: 'direct-1',
+    source_type: 'curated',
+    content: 'x',
+    estimated_tokens: 1,
+  };
+  const projected = projectRetrievedRecord(source, 3);
+  assert.strictEqual(projected.rank, 3);
+  assert.strictEqual(projected.reason, 'retrieved');
+  assert.strictEqual(projected.scope, null);
+  assert.strictEqual(projected.content, 'x');
+  assert.deepStrictEqual(source, {
+    source_id: 'direct-1',
+    source_type: 'curated',
+    content: 'x',
+    estimated_tokens: 1,
+  });
+});
+
+// BD43: forbidden secret-like fields are never copied into retrieved records
+test('BD43 forbidden secret-like fields excluded from retrieved payload', () => {
+  const secretCandidate = candidate({
+    source_id: 'secret-1',
+    content: 'safe content',
+    token: 'SUPER-SECRET-TOKEN',
+    apiKey: 'SUPER-SECRET-KEY',
+    nested: { authorization: 'Bearer SECRET-HEADER', safe: 'ok' },
+    list: [{ password: 'SECRET-PASSWORD' }, { keep: 1 }],
+  });
+  const pkg = buildContextPackage(packageParams({ candidates: [secretCandidate] }));
+  const record = pkg.retrieved[0];
+  assert.strictEqual(record.content, 'safe content');
+  assert.ok(!('token' in record), 'top-level token must not be copied');
+  assert.ok(!('apiKey' in record), 'top-level apiKey must not be copied');
+  assert.ok(!('authorization' in record.nested), 'nested authorization must not be copied');
+  assert.strictEqual(record.nested.safe, 'ok');
+  assert.ok(!('password' in record.list[0]), 'array-nested password must not be copied');
+  assert.strictEqual(record.list[1].keep, 1);
+  const serialized = JSON.stringify(pkg);
+  for (const marker of ['SUPER-SECRET-TOKEN', 'SUPER-SECRET-KEY', 'SECRET-HEADER', 'SECRET-PASSWORD']) {
+    assert.ok(!serialized.includes(marker), `serialized package must not contain ${marker}`);
+  }
+  assert.strictEqual(validateContextPackage(pkg), true);
+});
+
+// BD44: ContextPackage secret guard still fails closed on non-retrieved sections
+test('BD44 secret guard fails closed for objective and mandatory secrets', () => {
+  assert.throws(
+    () => buildContextPackage(packageParams({ objective: { objective_id: 'o', token: 'x' } })),
+    (e) => e instanceof ContextPackageError && e.code === 'INVALID_CONTEXT_PACKAGE'
+  );
+  assert.throws(
+    () =>
+      buildContextPackage(
+        packageParams({ mandatory: [{ source_id: 'm', source_type: 'mandatory', secret: 'x' }] })
+      ),
+    (e) => e instanceof ContextPackageError && e.code === 'INVALID_CONTEXT_PACKAGE'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Review corrections — P2 strict timestamps (thread 4114885763)
+// ---------------------------------------------------------------------------
+
+// BD45: strict timestamps reject invalid calendar dates
+test('BD45 strict timestamps reject invalid calendar dates', () => {
+  const invalid = [
+    '2026-02-30T00:00:00Z', // February 30 — Date.parse normalizes to March 2
+    '2026-02-29T00:00:00Z', // 2026 is not a leap year
+    '1900-02-29T00:00:00Z', // 1900 is not a leap year (100 rule)
+    '2026-04-31T00:00:00Z', // April has 30 days
+    '2026-13-01T00:00:00Z', // month 13
+    '2026-00-10T00:00:00Z', // month 00
+    '2026-01-00T00:00:00Z', // day 00
+    '2026-01-32T00:00:00Z', // day 32
+    '2026-01-01T24:00:00Z', // hour 24
+    '2026-01-01T00:60:00Z', // minute 60
+    '2026-01-01T00:00:60Z', // leap seconds are not representable in epoch ms
+  ];
+  for (const value of invalid) {
+    assert.strictEqual(parseRfc3339Utc(value), null, `${value} must be rejected`);
+    assert.throws(
+      () => buildContextPackage(packageParams({ hydration_started_at: value })),
+      (e) => e instanceof ContextPackageError && e.code === 'INVALID_HYDRATION_ANCHOR',
+      `${value} must fail closed as hydration anchor`
+    );
+  }
+});
+
+// BD46: strict validation still accepts valid RFC3339 UTC timestamps
+test('BD46 valid RFC3339 UTC timestamps still accepted', () => {
+  const valid = [
+    '2026-09-27T00:00:00Z',
+    '2028-02-29T12:34:56Z', // leap day (4 rule)
+    '2000-02-29T23:59:59.123Z', // leap day (400 rule) with milliseconds
+    '2026-01-01T00:00:00.5Z', // 1-digit fraction — preserved behavior
+    '2026-12-31T23:59:59Z',
+  ];
+  for (const value of valid) {
+    assert.notStrictEqual(parseRfc3339Utc(value), null, `${value} must be accepted`);
+  }
+  const pkg = buildContextPackage(packageParams({ hydration_started_at: '2028-02-29T12:34:56Z' }));
+  assert.strictEqual(pkg.hydration_started_at, '2028-02-29T12:34:56Z');
+});
+
+// BD47: strict timestamp validation applies to omission and retention surfaces
+test('BD47 strict timestamps enforced on omission and retention surfaces', () => {
+  // Invalid anchor rejected when building omission metadata.
+  assert.throws(
+    () =>
+      createOmissionMetadata(
+        { source_id: 'x', source_type: 'curated', estimated_tokens: 5 },
+        {
+          hydration_run_id: 'run-x',
+          hydration_started_at: '2026-02-30T00:00:00Z',
+          omission_reason: 'retrieval_budget_exceeded',
+        }
+      ),
+    (e) => e instanceof ContextPackageError && e.code === 'INVALID_HYDRATION_ANCHOR'
+  );
+
+  // Invalid expires_at rejected by the omission metadata allowlist validator.
+  const record = omissionRecord('x', '2026-09-27T00:00:00Z');
+  assert.throws(
+    () => assertAllowedOmissionMetadata({ ...record, expires_at: '2026-02-30T00:00:00Z' }),
+    (e) => e instanceof ContextPackageError && e.code === 'INVALID_OMISSION_METADATA'
+  );
+
+  // Invalid retention_current_time rejected by expiry checks and store reads.
+  assert.throws(
+    () => isExpired(record, '2026-02-30T00:00:00Z'),
+    (e) => e instanceof ContextPackageError && e.code === 'INVALID_RETENTION_TIME'
+  );
+  const store = createOmissionStore();
+  assert.throws(
+    () => store.list('2026-13-01T00:00:00Z'),
+    (e) => e instanceof ContextPackageError && e.code === 'INVALID_RETENTION_TIME'
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Review corrections — P2 side-effect-free failure (thread 4114885765)
+// ---------------------------------------------------------------------------
+
+// BD48: failed package validation leaves the omission store unchanged
+test('BD48 failed package validation is side-effect free for the store', () => {
+  const store = createOmissionStore();
+  store.add(omissionRecord('pre-existing', '2026-09-01T00:00:00Z'));
+  const before = JSON.stringify(store.list(HYDRATION_STARTED_AT));
+
+  assert.throws(
+    () =>
+      buildContextPackage(
+        packageParams({
+          candidates: [candidate({ source_id: 'big', estimated_tokens: 999999 })],
+          mandatory: [{ source_id: 'mand', source_type: 'mandatory', token: 'secret-value' }],
+          omission_store: store,
+        })
+      ),
+    (e) => e instanceof ContextPackageError && e.code === 'INVALID_CONTEXT_PACKAGE'
+  );
+
+  const after = JSON.stringify(store.list(HYDRATION_STARTED_AT));
+  assert.strictEqual(after, before, 'omission store must remain unchanged after a failed build');
+  assert.deepStrictEqual(
+    store.get('run-1', HYDRATION_STARTED_AT),
+    [],
+    'failed run metadata must not be persisted'
+  );
+  assert.strictEqual(store.size(HYDRATION_STARTED_AT), 1);
+});
+
+// BD49: objective secret failure also leaves the store unchanged
+test('BD49 objective secret failure also leaves the store unchanged', () => {
+  const store = createOmissionStore();
+  const before = store.size(HYDRATION_STARTED_AT);
+  assert.throws(
+    () =>
+      buildContextPackage(
+        packageParams({
+          candidates: [candidate({ source_id: 'big', estimated_tokens: 999999 })],
+          objective: { objective_id: 'o-1', password: 'secret' },
+          omission_store: store,
+        })
+      ),
+    (e) => e instanceof ContextPackageError && e.code === 'INVALID_CONTEXT_PACKAGE'
+  );
+  assert.strictEqual(store.size(HYDRATION_STARTED_AT), before);
 });
 
 // ---------------------------------------------------------------------------

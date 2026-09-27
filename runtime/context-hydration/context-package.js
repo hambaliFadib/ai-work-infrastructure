@@ -5,10 +5,11 @@
  * Contract: governance/contracts/context-hydration-v1.md (§11, §12)
  *
  * Assembles the deterministic ContextPackage envelope from mandatory
- * context, ranked candidates, and the budget record; builds omission
- * metadata for candidates excluded by the retrieval budget; and provides a
- * minimal deterministic in-memory omission store that enforces the 30-day
- * retention boundary on every read.
+ * context, ranked candidates, and the budget record; projects retrieved
+ * knowledge records preserving the selected candidate payload; builds
+ * omission metadata for candidates excluded by the retrieval budget; and
+ * provides a minimal deterministic in-memory omission store that enforces
+ * the 30-day retention boundary on every read.
  *
  * No DB infrastructure. No network. No environment access. No wall-clock
  * reads: every retention check takes an explicit retention_current_time.
@@ -119,15 +120,49 @@ class ContextPackageError extends Error {
 }
 
 /** Strict RFC3339 UTC timestamp pattern: ...Z only, optional milliseconds. */
-const RFC3339_UTC_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+const RFC3339_UTC_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?Z$/;
+
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(year) {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+function daysInMonth(year, month) {
+  if (month === 2 && isLeapYear(year)) return 29;
+  return DAYS_IN_MONTH[month - 1];
+}
 
 /**
  * Parse an RFC3339 UTC timestamp to epoch milliseconds.
  * Returns null when the value is not a valid RFC3339 UTC timestamp.
+ *
+ * Strict validation: the value must match the RFC3339 UTC syntax AND carry
+ * real calendar/time components. `Date.parse` alone is insufficient because
+ * it normalizes syntactically shaped but invalid dates (for example
+ * `2026-02-30T00:00:00Z` becomes March 2), which would silently retain an
+ * invalid anchor while expiry arithmetic used a different normalized
+ * instant. Components are therefore validated before Date.parse is used as
+ * the epoch computation.
+ *
+ * Leap seconds (second = 60) are not representable in the epoch-millisecond
+ * model and are deterministically rejected.
+ *
  * Deterministic: relies only on the string value, never on wall clock.
  */
 function parseRfc3339Utc(value) {
-  if (typeof value !== 'string' || !RFC3339_UTC_PATTERN.test(value)) return null;
+  if (typeof value !== 'string') return null;
+  const match = RFC3339_UTC_PATTERN.exec(value);
+  if (match === null) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > daysInMonth(year, month)) return null;
+  if (hour > 23 || minute > 59 || second > 59) return null;
   const epochMs = Date.parse(value);
   if (Number.isNaN(epochMs)) return null;
   return epochMs;
@@ -514,6 +549,56 @@ function validateContextPackage(contextPackage) {
 }
 
 /**
+ * Recursively copy a payload value while excluding forbidden (secret-like)
+ * field names at every level. Plain objects and arrays are copied; primitives
+ * pass through unchanged; non-plain objects pass through unchanged and remain
+ * subject to the final ContextPackage secret guard.
+ */
+function sanitizePayload(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((item) => sanitizePayload(item));
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype === Object.prototype || prototype === null) {
+    const copy = {};
+    for (const key of Object.keys(value)) {
+      if (FORBIDDEN_FIELD_NAMES.includes(key.toLowerCase())) continue;
+      copy[key] = sanitizePayload(value[key]);
+    }
+    return copy;
+  }
+  return value;
+}
+
+/**
+ * Safe retrieved-record projection (contract §11.1).
+ *
+ * `retrieved[]` means retrieved knowledge records: the selected candidate's
+ * knowledge payload and candidate fields (content, body, text, structured
+ * payloads, token-accounting metadata) are preserved, while the required
+ * audit fields — source_id, source_type, scope, score, rank, reason,
+ * provenance — are added/normalized.
+ *
+ * Forbidden secret-like fields are never copied into the package (excluded
+ * recursively by sanitizePayload). The ContextPackage secret guard still
+ * validates the complete package afterwards as a final defense.
+ *
+ * Never mutates the candidate.
+ */
+function projectRetrievedRecord(candidate, rank) {
+  const record = sanitizePayload(candidate);
+  return {
+    ...record,
+    source_id: record.source_id,
+    source_type: record.source_type,
+    scope: record.scope !== undefined ? record.scope : null,
+    score: record.score !== undefined ? record.score : null,
+    rank,
+    reason: RETRIEVED_REASON,
+    provenance: record.provenance !== undefined ? record.provenance : null,
+  };
+}
+
+/**
  * Build the deterministic ContextPackage envelope (contract §11).
  *
  * Steps:
@@ -521,8 +606,9 @@ function validateContextPackage(contextPackage) {
  *  2. compute the budget (mandatory overflow fails closed)
  *  3. deduplicate candidates deterministically
  *  4. enforce the retrieval budget (deterministic greedy fill)
- *  5. project retrieved audit records and omission metadata
- *  6. persist omission metadata to the store when one is supplied
+ *  5. project retrieved knowledge records and omission metadata
+ *  6. validate the complete ContextPackage
+ *  7. persist omission metadata only after validation succeeds
  *
  * Mandatory context is preserved verbatim: it is never deduplicated, never
  * omitted, never truncated, and never silently dropped. When mandatory
@@ -607,17 +693,13 @@ function buildContextPackage(params) {
   // Retrieval budget enforcement.
   const split = applyRetrievalBudget(deduplicated, budget.retrieval_budget_tokens);
 
-  // Retrieved audit projection (audit fields + resolved token count).
-  const retrieved = split.retrieved.map((candidate) => ({
-    source_id: candidate.source_id,
-    source_type: candidate.source_type,
-    scope: candidate.scope !== undefined ? candidate.scope : null,
-    score: candidate.score !== undefined ? candidate.score : null,
-    rank: rankByCandidate.get(candidate),
-    reason: RETRIEVED_REASON,
-    provenance: candidate.provenance !== undefined ? candidate.provenance : null,
-    estimated_tokens: candidate.estimated_tokens,
-  }));
+  // Retrieved records: preserve the selected knowledge payload and candidate
+  // fields (content, body, text, structured payloads, token-accounting
+  // metadata) while adding/normalizing the required audit fields
+  // (contract §11.1). Forbidden secret-like fields are never copied.
+  const retrieved = split.retrieved.map((candidate) =>
+    projectRetrievedRecord(candidate, rankByCandidate.get(candidate))
+  );
 
   // Omission metadata: allowed metadata only, never full content.
   const omitted = split.omitted.map((candidate) =>
@@ -628,12 +710,6 @@ function buildContextPackage(params) {
       rank: rankByCandidate.get(candidate),
     })
   );
-
-  if (omission_store !== null) {
-    for (const metadata of omitted) {
-      omission_store.add(metadata);
-    }
-  }
 
   const contextPackage = {
     hydration_run_id,
@@ -659,7 +735,18 @@ function buildContextPackage(params) {
     },
   };
 
+  // Validation MUST complete before any store write: a failed hydration run
+  // must leave the omission store unchanged (side-effect-free failure).
   validateContextPackage(contextPackage);
+
+  // Persist omission metadata only after the complete ContextPackage has
+  // been validated successfully.
+  if (omission_store !== null) {
+    for (const metadata of omitted) {
+      omission_store.add(metadata);
+    }
+  }
+
   return contextPackage;
 }
 
@@ -679,6 +766,7 @@ module.exports = {
   createOmissionMetadata,
   assertAllowedOmissionMetadata,
   createOmissionStore,
+  projectRetrievedRecord,
   buildContextPackage,
   validateContextPackage,
 };
