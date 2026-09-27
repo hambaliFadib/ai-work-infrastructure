@@ -2,8 +2,8 @@
  * Context Hydration — Objective Parser acceptance tests (Issue #9, 9A-02).
  *
  * Covers O01–O10 plus confidence boundaries, schema completeness, term
- * normalization, intent classification, checkpoint provenance, and
- * fail-closed input validation.
+ * normalization, intent classification, checkpoint provenance, fail-closed
+ * input validation, and review-correction regressions (RC01–RC10).
  *
  * No network. No database. No env/profile access. No wall-clock dependency.
  * Deterministic under context-hydration@1.0.1.
@@ -76,10 +76,10 @@ test('O02 clear request produces structured objective', () => {
 test('O03 scope extracted correctly', () => {
   const objective = parseObjective(baseInput());
   assert.deepStrictEqual(objective.scope, { session_id: 'sess-1', job_id: 'job-7' });
-  const overridden = parseObjective(baseInput({
-    explicit_objective: { scope: { job_id: 'job-9' } },
+  const confirmed = parseObjective(baseInput({
+    explicit_objective: { scope: { job_id: 'job-7' } },
   }));
-  assert.deepStrictEqual(overridden.scope, { session_id: 'sess-1', job_id: 'job-9' });
+  assert.deepStrictEqual(confirmed.scope, { session_id: 'sess-1', job_id: 'job-7' });
 });
 
 // O04: active constraints preserved
@@ -293,6 +293,132 @@ test('T10 policy lock is context-hydration@1.0.1', () => {
   assert.strictEqual(POLICY_REF, 'context-hydration@1.0.1');
   const objective = parseObjective(baseInput());
   assert.strictEqual(objective.provenance.policy_ref, 'context-hydration@1.0.1');
+});
+
+// RC01: foreign explicit session scope rejected (review 4115581853)
+test('RC01 foreign explicit session scope rejected', () => {
+  let threw = null;
+  try {
+    parseObjective(baseInput({ explicit_objective: { scope: { session_id: 'other-session' } } }));
+  } catch (e) {
+    threw = e;
+  }
+  assert.ok(threw instanceof ObjectiveParserError, 'must throw ObjectiveParserError');
+  assert.strictEqual(threw.code, 'EXPLICIT_SCOPE_MISMATCH');
+});
+
+// RC02: foreign explicit job scope rejected (review 4115581853)
+test('RC02 foreign explicit job scope rejected', () => {
+  let threw = null;
+  try {
+    parseObjective(baseInput({ explicit_objective: { scope: { job_id: 'other-job' } } }));
+  } catch (e) {
+    threw = e;
+  }
+  assert.ok(threw instanceof ObjectiveParserError, 'must throw ObjectiveParserError');
+  assert.strictEqual(threw.code, 'EXPLICIT_SCOPE_MISMATCH');
+});
+
+// RC03: foreign explicit session+job scope rejected (review 4115581853)
+test('RC03 foreign explicit session+job scope rejected', () => {
+  let threw = null;
+  try {
+    parseObjective(baseInput({ explicit_objective: { scope: { session_id: 'other-session', job_id: 'other-job' } } }));
+  } catch (e) {
+    threw = e;
+  }
+  assert.ok(threw instanceof ObjectiveParserError, 'must throw ObjectiveParserError');
+  assert.strictEqual(threw.code, 'EXPLICIT_SCOPE_MISMATCH');
+});
+
+// RC04: matching explicit scope accepted; scope/provenance parity (review 4115581853)
+test('RC04 matching explicit scope accepted and scope/provenance aligned', () => {
+  const sessionOnly = parseObjective(baseInput({ explicit_objective: { scope: { session_id: 'sess-1' } } }));
+  const jobOnly = parseObjective(baseInput({ explicit_objective: { scope: { job_id: 'job-7' } } }));
+  const both = parseObjective(baseInput({ explicit_objective: { scope: { session_id: 'sess-1', job_id: 'job-7' } } }));
+  for (const objective of [sessionOnly, jobOnly, both]) {
+    assert.deepStrictEqual(objective.scope, { session_id: 'sess-1', job_id: 'job-7' });
+    assert.strictEqual(objective.scope.session_id, objective.provenance.session_id);
+    assert.strictEqual(objective.scope.job_id, objective.provenance.job_id);
+    assert.strictEqual(objective.scope.session_id, 'sess-1');
+    assert.strictEqual(objective.scope.job_id, 'job-7');
+  }
+});
+
+// RC05: empty explicit objective must not auto-escalate (review 4115581856)
+test('RC05 empty explicit objective with empty request stays LOW', () => {
+  const objective = parseObjective(baseInput({ user_request: '', explicit_objective: {} }));
+  assert.ok(objective.confidence < 0.60, `expected LOW band, got ${objective.confidence}`);
+  const policy = confidencePolicy(objective.confidence);
+  assert.strictEqual(policy.level, 'LOW');
+  assert.strictEqual(policy.automatic_retrieval_disabled, true);
+  assert.strictEqual(policy.mandatory_context_loads, true);
+});
+
+// RC06: explicit empty arrays must not auto-escalate (review 4115581856)
+test('RC06 explicit empty arrays with empty request stay LOW', () => {
+  for (const explicit_objective of [{ entities: [] }, { constraints: [] }, { retrieval_terms: [] }]) {
+    const objective = parseObjective(baseInput({ user_request: '', explicit_objective }));
+    assert.ok(objective.confidence < 0.60, `expected LOW band for ${JSON.stringify(explicit_objective)}, got ${objective.confidence}`);
+    assert.strictEqual(confidencePolicy(objective.confidence).automatic_retrieval_disabled, true);
+  }
+});
+
+// RC07: matching scope only is not a confidence signal (review 4115581856)
+test('RC07 matching scope only with empty request stays LOW', () => {
+  const objective = parseObjective(baseInput({
+    user_request: '',
+    explicit_objective: { scope: { session_id: 'sess-1', job_id: 'job-7' } },
+  }));
+  assert.ok(objective.confidence < 0.60, `expected LOW band, got ${objective.confidence}`);
+  assert.strictEqual(confidencePolicy(objective.confidence).level, 'LOW');
+});
+
+// RC08: empty explicit objective with clear request derives confidence from request signals
+test('RC08 empty explicit objective with clear request derives confidence from request', () => {
+  const objective = parseObjective(baseInput({ explicit_objective: {} }));
+  assert.strictEqual(objective.summary, 'Implement the objective parser module');
+  assert.strictEqual(objective.intent, 'IMPLEMENT');
+  assert.strictEqual(objective.confidence, 0.90);
+  assert.strictEqual(classifyConfidence(objective.confidence), 'HIGH');
+});
+
+// RC09: meaningful explicit signals keep explicit confidence and are preserved
+test('RC09 meaningful explicit signals keep explicit confidence', () => {
+  const entities = parseObjective(baseInput({ explicit_objective: { entities: ['Context Hydration'] } }));
+  assert.strictEqual(entities.confidence, 1.00);
+  assert.deepStrictEqual(entities.entities, ['Context Hydration']);
+  const constraints = parseObjective(baseInput({ explicit_objective: { constraints: ['no secrets'] } }));
+  assert.strictEqual(constraints.confidence, 1.00);
+  assert.deepStrictEqual(constraints.constraints, ['no secrets']);
+  const terms = parseObjective(baseInput({ explicit_objective: { retrieval_terms: ['objective parser'] } }));
+  assert.strictEqual(terms.confidence, 1.00);
+  assert.deepStrictEqual(terms.retrieval_terms, ['objective parser']);
+});
+
+// RC10: checkpoint object form requires a non-empty ID (review 4115581861)
+test('RC10 checkpoint object form requires a non-empty ID', () => {
+  const expectInvalid = (latest_checkpoint) => {
+    let threw = null;
+    try {
+      parseObjective(baseInput({ latest_checkpoint }));
+    } catch (e) {
+      threw = e;
+    }
+    assert.ok(threw instanceof ObjectiveParserError, `expected rejection for ${JSON.stringify(latest_checkpoint)}`);
+    assert.strictEqual(threw.code, 'INVALID_LATEST_CHECKPOINT');
+  };
+  expectInvalid({});
+  expectInvalid({ checkpoint_id: null });
+  expectInvalid({ checkpoint_id: undefined });
+  expectInvalid({ checkpoint_id: '' });
+  expectInvalid({ checkpoint_id: '   ' });
+  const valid = parseObjective(baseInput({ latest_checkpoint: { checkpoint_id: 'cp-123' } }));
+  assert.strictEqual(valid.provenance.checkpoint_id, 'cp-123');
+  const again = parseObjective(baseInput({ latest_checkpoint: { checkpoint_id: 'cp-123' } }));
+  assert.strictEqual(valid.objective_id, again.objective_id);
+  const absent = parseObjective(baseInput({ latest_checkpoint: undefined }));
+  assert.strictEqual(absent.provenance.checkpoint_id, null);
 });
 
 // Summary

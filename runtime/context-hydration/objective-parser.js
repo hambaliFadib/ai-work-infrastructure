@@ -20,9 +20,16 @@
  *
  * Implementation-level choices (deterministic, documented, not additional
  * normative behavior):
+ *   - Active session/job scope is a hard boundary: explicit_objective.scope may
+ *     only confirm the active identifiers; mismatched identifiers fail closed
+ *     (EXPLICIT_SCOPE_MISMATCH).
+ *   - A meaningful explicit objective contributes at least one substantive
+ *     signal (non-empty summary or intent, entities, constraints, or
+ *     retrieval_terms). An empty explicit object, empty arrays, or matching
+ *     scope only are NOT meaningful and fall back to effective-signal scoring.
  *   - Confidence is derived from integer signal weights (percent), so identical
  *     input always yields the identical number:
- *       explicit objective present             -> 100
+ *       meaningful explicit objective         -> 100
  *       otherwise: non-empty summary           -> +40
  *                  recognized intent           -> +30
  *                  retrieval_terms.length >= 3 -> +20
@@ -186,9 +193,8 @@ function extractCheckpointId(latestCheckpoint) {
   }
   if (typeof latestCheckpoint === 'object' && !Array.isArray(latestCheckpoint)) {
     const id = latestCheckpoint.checkpoint_id;
-    if (id === undefined || id === null) return null;
     if (typeof id !== 'string' || id.trim() === '') {
-      fail('INVALID_LATEST_CHECKPOINT', 'latest_checkpoint.checkpoint_id must be a non-empty string when present');
+      fail('INVALID_LATEST_CHECKPOINT', 'latest_checkpoint object form requires a non-empty checkpoint_id string');
     }
     return id.trim();
   }
@@ -281,6 +287,20 @@ function mergeConstraints(active, explicitConstraints) {
 }
 
 /**
+ * A meaningful explicit objective contributes at least one substantive signal.
+ * Matching scope identifiers and empty arrays do not count (review 4115581856).
+ */
+function hasMeaningfulExplicitSignal(explicit) {
+  if (!explicit) return false;
+  if (explicit.summary !== undefined && explicit.summary !== '') return true;
+  if (explicit.intent !== undefined && explicit.intent !== '') return true;
+  if (Array.isArray(explicit.entities) && explicit.entities.length > 0) return true;
+  if (Array.isArray(explicit.constraints) && explicit.constraints.length > 0) return true;
+  if (Array.isArray(explicit.retrieval_terms) && explicit.retrieval_terms.length > 0) return true;
+  return false;
+}
+
+/**
  * Canonical JSON with sorted object keys; arrays keep their order.
  */
 function stableStringify(value) {
@@ -320,11 +340,16 @@ function parseObjective(input) {
 
   const objectiveSource = explicit ? 'explicit_objective' : 'inferred_request';
 
-  // Scope: inferred from session/job inputs; explicit scope fields override.
+  // Scope: the active session/job inputs are the authoritative boundary.
+  // Explicit scope may only confirm them; mismatches fail closed (review 4115581853).
   const scope = { session_id: sessionId, job_id: jobId };
   if (explicit && explicit.scope) {
-    if (explicit.scope.session_id !== undefined) scope.session_id = explicit.scope.session_id;
-    if (explicit.scope.job_id !== undefined) scope.job_id = explicit.scope.job_id;
+    if (explicit.scope.session_id !== undefined && explicit.scope.session_id !== sessionId) {
+      fail('EXPLICIT_SCOPE_MISMATCH', 'explicit_objective.scope.session_id must match the active session_id');
+    }
+    if (explicit.scope.job_id !== undefined && explicit.scope.job_id !== jobId) {
+      fail('EXPLICIT_SCOPE_MISMATCH', 'explicit_objective.scope.job_id must match the active job_id');
+    }
   }
 
   // Summary: explicit summary outranks the inferred request text.
@@ -350,8 +375,10 @@ function parseObjective(input) {
     : activeConstraints;
 
   // Confidence: integer percent weights keep identical inputs identical (O09).
+  // Only a meaningful explicit objective may take the explicit-confidence path;
+  // an empty explicit object must not auto-escalate (review 4115581856).
   let confidence;
-  if (explicit) {
+  if (explicit && hasMeaningfulExplicitSignal(explicit)) {
     confidence = 1;
   } else {
     let score = 0;
