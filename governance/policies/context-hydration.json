@@ -170,7 +170,21 @@
       "latest_valid_checkpoint",
       "mandatory_project_instructions"
     ],
-    "overflow_error": "CONTEXT_BUDGET_EXCEEDED"
+    "overflow_error": "CONTEXT_BUDGET_EXCEEDED",
+    "dedup": {
+      "identity_fields": ["source_type", "source_id"],
+      "malformed_identity": "fail_closed",
+      "duplicate_resolution": "first_in_ranked_order",
+      "mandatory_context_exempt": true
+    },
+    "retrieval_fitting": {
+      "strategy": "ranked_order_greedy_skip_and_continue",
+      "candidate_atomic": true,
+      "reordering": false,
+      "packing_optimization": false,
+      "candidate_truncation": false,
+      "continue_after_non_fit": true
+    }
   },
   "context_package": {
     "required_fields": [
@@ -248,12 +262,32 @@
       "require_override_above_default_through_hard_max": true,
       "allow_through_hard_max_with_override": true,
       "reject_above_hard_max_regardless_of_override": true,
-      "hard_limit_precedes_override_requirement": true
+      "hard_limit_precedes_override_requirement": true,
+      "conflict_precedes_chain_limits": true
+    },
+    "duplicate_resolution": {
+      "identity_field": "skill_id",
+      "first_occurrence_retains_class": true,
+      "first_occurrence_retains_phase": true,
+      "explicit_flag": "logical_or",
+      "first_occurrence_position_preserved": true,
+      "conflict_detection_before_collapse": true
+    },
+    "empty_chain": {
+      "valid": true,
+      "count": 0,
+      "ordered": [],
+      "override_applied": false,
+      "requires_override": false
     },
     "errors": {
       "chain_requires_override": "SKILL_CHAIN_REQUIRES_OVERRIDE",
       "chain_limit_exceeded": "SKILL_CHAIN_LIMIT_EXCEEDED",
       "conflict": "SKILL_CONFLICT"
+    },
+    "guard_errors": {
+      "invalid_input": "SKILL_INVALID_INPUT",
+      "override_forbidden": "SKILL_OVERRIDE_FORBIDDEN"
     },
     "invariants": {
       "never_silently_truncate": true,
