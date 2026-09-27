@@ -17,7 +17,9 @@
  *
  * Determinism: no wall-clock reads, no network, no environment access, no
  * randomness. Identical inputs produce identical outputs. Inputs are never
- * mutated.
+ * mutated. Exported policy constants (SKILL_CLASSES, EXECUTION_ORDER,
+ * LIMITS, SKILL_ERRORS, PROTECTED_OVERRIDE_DOMAINS) are frozen: consumers
+ * can never mutate resolver policy globally.
  */
 
 'use strict';
@@ -25,41 +27,47 @@
 const POLICY_ID = 'context-hydration';
 const POLICY_VERSION = '1.0.1';
 
-/** Policy 1.0.1 skills.classes — exact class values. */
-const SKILL_CLASSES = ['PRIMARY', 'SUPPORTING', 'CONFLICTING'];
+/**
+ * Exported policy constants are frozen so consumers can never mutate
+ * resolver policy globally (determinism: identical calls must not depend on
+ * earlier callers).
+ */
 
-/** Policy 1.0.1 skills.execution_order — normative phase order. */
-const EXECUTION_ORDER = ['UNDERSTAND', 'DESIGN/PLAN', 'EXECUTE', 'VALIDATE'];
+/** Policy 1.0.1 skills.classes — exact class values. Frozen. */
+const SKILL_CLASSES = Object.freeze(['PRIMARY', 'SUPPORTING', 'CONFLICTING']);
 
-/** Policy 1.0.1 skills.limits — default / override / hard maxima. */
-const LIMITS = {
+/** Policy 1.0.1 skills.execution_order — normative phase order. Frozen. */
+const EXECUTION_ORDER = Object.freeze(['UNDERSTAND', 'DESIGN/PLAN', 'EXECUTE', 'VALIDATE']);
+
+/** Policy 1.0.1 skills.limits — default / override / hard maxima. Frozen. */
+const LIMITS = Object.freeze({
   default_max: 3,
   override_max: 5,
   hard_max: 5,
-};
+});
 
 /**
- * Policy 1.0.1 skills.errors — exact policy error codes.
+ * Policy 1.0.1 skills.errors — exact policy error codes. Frozen.
  * OVERRIDE_FORBIDDEN and INVALID_INPUT are resolver-level fail-closed guards
  * implementing the §11.6 invariants; they are not policy-defined codes.
  */
-const SKILL_ERRORS = {
+const SKILL_ERRORS = Object.freeze({
   CHAIN_REQUIRES_OVERRIDE: 'SKILL_CHAIN_REQUIRES_OVERRIDE',
   CHAIN_LIMIT_EXCEEDED: 'SKILL_CHAIN_LIMIT_EXCEEDED',
   CONFLICT: 'SKILL_CONFLICT',
   OVERRIDE_FORBIDDEN: 'SKILL_OVERRIDE_FORBIDDEN',
   INVALID_INPUT: 'SKILL_INVALID_INPUT',
-};
+});
 
 /**
- * Domains a skill chain may NEVER override (contract §11.6).
+ * Domains a skill chain may NEVER override (contract §11.6). Frozen.
  * Any truthy override request for any key (known or unknown) fails closed.
  */
-const PROTECTED_OVERRIDE_DOMAINS = [
+const PROTECTED_OVERRIDE_DOMAINS = Object.freeze([
   'runtime_policy',
   'permissions',
   'security_constraints',
-];
+]);
 
 class SkillResolverError extends Error {
   constructor(code, message) {

@@ -69,6 +69,21 @@ function isError(code) {
   return (err) => err instanceof SkillResolverError && err.code === code;
 }
 
+/**
+ * Attempt a mutation against exported policy state without letting a
+ * strict-mode TypeError abort the test. Returns the disposition:
+ * 'threw' (strict mode) or 'silent' (no-op). Tests must NOT rely on the
+ * exception alone — resolver behavior is verified afterwards.
+ */
+function attemptMutation(fn) {
+  try {
+    fn();
+    return 'silent';
+  } catch (e) {
+    return 'threw';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Policy parity
 // ---------------------------------------------------------------------------
@@ -456,6 +471,188 @@ test('SK32 determinism and immutability', () => {
   first.ordered.push({});
   const third = resolveSkillChain(input);
   assert.deepStrictEqual(third, second);
+});
+
+// ---------------------------------------------------------------------------
+// Review correction — immutable exported policy state (thread 4114985576)
+// ---------------------------------------------------------------------------
+
+// SK33: every exported policy structure used by resolver behavior is frozen
+test('SK33 exported policy structures are frozen', () => {
+  assert.strictEqual(Object.isFrozen(SKILL_CLASSES), true, 'SKILL_CLASSES must be frozen');
+  assert.strictEqual(Object.isFrozen(EXECUTION_ORDER), true, 'EXECUTION_ORDER must be frozen');
+  assert.strictEqual(Object.isFrozen(LIMITS), true, 'LIMITS must be frozen');
+  assert.strictEqual(Object.isFrozen(SKILL_ERRORS), true, 'SKILL_ERRORS must be frozen');
+  assert.strictEqual(
+    Object.isFrozen(PROTECTED_OVERRIDE_DOMAINS),
+    true,
+    'PROTECTED_OVERRIDE_DOMAINS must be frozen'
+  );
+});
+
+// SK34: attempted LIMITS.hard_max = 6 cannot change hard-limit behavior
+test('SK34 LIMITS mutation attempt cannot change limit behavior', () => {
+  const dispositions = [
+    attemptMutation(() => { LIMITS.hard_max = 6; }),
+    attemptMutation(() => { LIMITS.default_max = 10; }),
+    attemptMutation(() => { LIMITS.override_max = 99; }),
+  ];
+  for (const disposition of dispositions) {
+    assert.ok(disposition === 'threw' || disposition === 'silent', 'attempt must not apply');
+  }
+  // Constants are unchanged.
+  assert.strictEqual(LIMITS.hard_max, 5);
+  assert.strictEqual(LIMITS.default_max, 3);
+  assert.strictEqual(LIMITS.override_max, 5);
+  // Six skills with override still hard-reject after the mutation attempt.
+  assert.throws(
+    () => resolveSkillChain({ skills: [a, b, c, d, e, f], explicit_override: true }),
+    isError(SKILL_ERRORS.CHAIN_LIMIT_EXCEEDED)
+  );
+  // Four skills without override still require the override.
+  assert.throws(
+    () => resolveSkillChain({ skills: [a, b, c, d] }),
+    isError(SKILL_ERRORS.CHAIN_REQUIRES_OVERRIDE)
+  );
+  // Five skills with override remain allowed.
+  const five = resolveSkillChain({ skills: [a, b, c, d, e], explicit_override: true });
+  assert.strictEqual(five.count, 5);
+});
+
+// SK35: attempted EXECUTION_ORDER push/change cannot alter the normative order
+test('SK35 EXECUTION_ORDER mutation attempt cannot change phase order', () => {
+  const input = { skills: [d, a, c, b], explicit_override: true };
+  const before = resolveSkillChain(input);
+  const dispositions = [
+    attemptMutation(() => { EXECUTION_ORDER.push('POST'); }),
+    attemptMutation(() => { EXECUTION_ORDER.reverse(); }),
+    attemptMutation(() => { EXECUTION_ORDER[0] = 'VALIDATE'; }),
+    attemptMutation(() => { EXECUTION_ORDER.splice(0, 1); }),
+  ];
+  for (const disposition of dispositions) {
+    assert.ok(disposition === 'threw' || disposition === 'silent', 'attempt must not apply');
+  }
+  assert.deepStrictEqual(EXECUTION_ORDER, ['UNDERSTAND', 'DESIGN/PLAN', 'EXECUTE', 'VALIDATE']);
+  const after = resolveSkillChain(input);
+  assert.deepStrictEqual(
+    after.ordered.map((r) => r.phase),
+    ['UNDERSTAND', 'DESIGN/PLAN', 'EXECUTE', 'VALIDATE']
+  );
+  assert.strictEqual(JSON.stringify(after), JSON.stringify(before));
+  // Non-normative phases are still rejected as invalid input.
+  assert.throws(
+    () => resolveSkillChain({ skills: [skill('s', 'PRIMARY', 'POST')] }),
+    isError(SKILL_ERRORS.INVALID_INPUT)
+  );
+});
+
+// SK36: attempted SKILL_CLASSES mutation cannot make invalid classes accepted
+test('SK36 SKILL_CLASSES mutation attempt cannot accept invalid classes', () => {
+  const dispositions = [
+    attemptMutation(() => { SKILL_CLASSES.push('SECONDARY'); }),
+    attemptMutation(() => { SKILL_CLASSES[0] = 'SECONDARY'; }),
+    attemptMutation(() => { SKILL_CLASSES.length = 0; }),
+  ];
+  for (const disposition of dispositions) {
+    assert.ok(disposition === 'threw' || disposition === 'silent', 'attempt must not apply');
+  }
+  assert.deepStrictEqual(SKILL_CLASSES, ['PRIMARY', 'SUPPORTING', 'CONFLICTING']);
+  assert.throws(
+    () => resolveSkillChain({ skills: [skill('s', 'SECONDARY', 'UNDERSTAND')] }),
+    isError(SKILL_ERRORS.INVALID_INPUT)
+  );
+  assert.throws(
+    () => resolveSkillChain({ skills: [skill('s', 'ADVISORY', 'UNDERSTAND')] }),
+    isError(SKILL_ERRORS.INVALID_INPUT)
+  );
+  // Valid classes still resolve.
+  const result = resolveSkillChain({ skills: [a] });
+  assert.strictEqual(result.count, 1);
+});
+
+// SK37: attempted SKILL_ERRORS mutation cannot change emitted policy codes
+test('SK37 SKILL_ERRORS mutation attempt cannot change emitted codes', () => {
+  const dispositions = [
+    attemptMutation(() => { SKILL_ERRORS.CONFLICT = 'SKILL_NOT_A_CONFLICT'; }),
+    attemptMutation(() => { SKILL_ERRORS.CHAIN_LIMIT_EXCEEDED = 'X'; }),
+    attemptMutation(() => { SKILL_ERRORS.CHAIN_REQUIRES_OVERRIDE = 'X'; }),
+  ];
+  for (const disposition of dispositions) {
+    assert.ok(disposition === 'threw' || disposition === 'silent', 'attempt must not apply');
+  }
+  assert.strictEqual(SKILL_ERRORS.CONFLICT, 'SKILL_CONFLICT');
+  assert.strictEqual(SKILL_ERRORS.CHAIN_LIMIT_EXCEEDED, 'SKILL_CHAIN_LIMIT_EXCEEDED');
+  assert.strictEqual(SKILL_ERRORS.CHAIN_REQUIRES_OVERRIDE, 'SKILL_CHAIN_REQUIRES_OVERRIDE');
+  // Emitted codes are unchanged in actual resolver behavior.
+  assert.throws(() => resolveSkillChain({ skills: [a, x] }), isError('SKILL_CONFLICT'));
+  assert.throws(
+    () => resolveSkillChain({ skills: [a, b, c, d, e, f], explicit_override: true }),
+    isError('SKILL_CHAIN_LIMIT_EXCEEDED')
+  );
+  assert.throws(
+    () => resolveSkillChain({ skills: [a, b, c, d] }),
+    isError('SKILL_CHAIN_REQUIRES_OVERRIDE')
+  );
+});
+
+// SK38: attempted PROTECTED_OVERRIDE_DOMAINS mutation cannot weaken boundaries
+test('SK38 PROTECTED_OVERRIDE_DOMAINS mutation attempt cannot weaken boundaries', () => {
+  const dispositions = [
+    attemptMutation(() => { PROTECTED_OVERRIDE_DOMAINS.length = 0; }),
+    attemptMutation(() => { PROTECTED_OVERRIDE_DOMAINS.push('other'); }),
+    attemptMutation(() => { PROTECTED_OVERRIDE_DOMAINS.pop(); }),
+  ];
+  for (const disposition of dispositions) {
+    assert.ok(disposition === 'threw' || disposition === 'silent', 'attempt must not apply');
+  }
+  assert.deepStrictEqual(
+    PROTECTED_OVERRIDE_DOMAINS,
+    ['runtime_policy', 'permissions', 'security_constraints']
+  );
+  // Protected-domain override requests still fail closed.
+  assert.throws(
+    () => resolveSkillChain({ skills: [a], override_request: { runtime_policy: true } }),
+    isError(SKILL_ERRORS.OVERRIDE_FORBIDDEN)
+  );
+  assert.throws(
+    () => resolveSkillChain({ skills: [a], override_request: { permissions: true } }),
+    isError(SKILL_ERRORS.OVERRIDE_FORBIDDEN)
+  );
+  assert.throws(
+    () => resolveSkillChain({ skills: [a], override_request: { security_constraints: true } }),
+    isError(SKILL_ERRORS.OVERRIDE_FORBIDDEN)
+  );
+});
+
+// SK39: identical calls remain byte-identical before/after every mutation attempt
+test('SK39 mutation attempts leave resolver behavior byte-identical', () => {
+  const input = { skills: [d, a, c], explicit_override: true };
+  const baseline = resolveSkillChain(input);
+
+  const attempts = [
+    () => { LIMITS.hard_max = 6; },
+    () => { LIMITS.default_max = 0; },
+    () => { LIMITS.override_max = 99; },
+    () => { EXECUTION_ORDER.push('POST'); },
+    () => { EXECUTION_ORDER.reverse(); },
+    () => { SKILL_CLASSES.push('SECONDARY'); },
+    () => { SKILL_CLASSES.splice(0, 1); },
+    () => { SKILL_ERRORS.CONFLICT = 'X'; },
+    () => { SKILL_ERRORS.CHAIN_REQUIRES_OVERRIDE = 'X'; },
+    () => { PROTECTED_OVERRIDE_DOMAINS.pop(); },
+  ];
+  const dispositions = attempts.map((attempt) => attemptMutation(attempt));
+  for (const disposition of dispositions) {
+    assert.ok(disposition === 'threw' || disposition === 'silent', 'attempt must not apply');
+  }
+
+  const after = resolveSkillChain(input);
+  assert.strictEqual(JSON.stringify(after), JSON.stringify(baseline), 'behavior must be byte-identical');
+  // The six-skill hard limit still holds after all mutation attempts.
+  assert.throws(
+    () => resolveSkillChain({ skills: [a, b, c, d, e, f], explicit_override: true }),
+    isError(SKILL_ERRORS.CHAIN_LIMIT_EXCEEDED)
+  );
 });
 
 // ---------------------------------------------------------------------------
