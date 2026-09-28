@@ -308,7 +308,19 @@
         "semantic_relevance_is_ranking_factor": true,
         "semantic_relevance_threshold": null,
         "zero_semantic_relevance_alone_rejects": false,
-        "final_inclusion_requires_locked_gates": true
+        "final_inclusion_requires_locked_gates": true,
+        "canonical_proof": {
+          "minimum_confidence_level": "MEDIUM",
+          "minimum_confidence_score": 0.60,
+          "raw_request_explicit": true,
+          "requested_source_id_must_match": true,
+          "provider_must_be_invoked": true,
+          "eligibility_must_pass": true,
+          "eligibility_reason": "ELIGIBLE_EXPLICIT_RAW",
+          "candidate_must_reach_ranking": true,
+          "ranking_rejection": "unknown_authority",
+          "must_be_absent_from_retrieved": true
+        }
       }
     }
   }

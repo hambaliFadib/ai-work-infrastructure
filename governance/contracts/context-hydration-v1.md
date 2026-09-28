@@ -483,23 +483,55 @@ Explicit normative statements:
 - A candidate rejected by those gates must not appear in `ContextPackage.retrieved`.
 - H03 MUST NOT mean: `semantic_relevance == 0 → reject`.
 
-Canonical deterministic H03 acceptance proof:
+Canonical deterministic H03 acceptance proof (correction for finding 4123353421):
+
+Deterministic preconditions — a canonical H03 acceptance case is INVALID unless all of the following hold:
+
+- P1 — Confidence permits candidate retrieval: the objective classifies as MEDIUM or HIGH (`objective.confidence >= 0.60`). LOW confidence is explicitly invalid for the canonical H03 proof because LOW disables all candidate retrieval before ranking.
+- P2 — Concrete raw request: `raw_source_request.explicit === true` and `raw_source_request.source_ids` contains the exact test candidate's `source_id` (example identity: `raw-h03-1`).
+- P3 — Provider available and invoked: a raw_source provider exists and MUST be invoked exactly as allowed by the existing retrieval contract; it returns the candidate carrying the concrete requested `source_id`.
+- P4 — Candidate survives retrieval filtering: the candidate passes the raw adapter's explicit source-id filter and is present in the retrieved candidate input to eligibility.
+- P5 — Candidate passes eligibility: eligibility MUST produce `eligible = true` with reason `ELIGIBLE_EXPLICIT_RAW`. The candidate is not LOW_CONFIDENCE_MANDATORY_ONLY, RAW_SOURCE_EXPLICIT_ONLY, FOREIGN_JOB_HARD_REJECT, or INVALID_CANDIDATE.
+- P6 — Candidate reaches ranking: the exact raw candidate MUST be passed to ranking. This is mandatory evidence.
+- P7 — Ranking rejects for authority: policy 1.0.1 defines no raw_source authority baseline, so ranking MUST fail-close the candidate with the existing `unknown_authority` rankability result.
+- P8 — Final ContextPackage exclusion: the candidate MUST NOT appear in `ContextPackage.retrieved`.
+
+Canonical flow (normative — MUST, never "may"):
 
 ```
-explicit raw_source requested
+objective confidence MEDIUM/HIGH (>= 0.60)
         ↓
-raw provider may be invoked
+explicit raw_source request
         ↓
-candidate may cross the explicit retrieval/eligibility boundary
+concrete requested source_id
         ↓
-raw_source has no authority baseline under policy 1.0.1
+raw provider MUST be invoked
         ↓
-ranking rejects the candidate as unknown_authority
+provider returns requested raw candidate
         ↓
-candidate does not appear in ContextPackage.retrieved
+candidate survives explicit source-id filtering
+        ↓
+eligibility MUST PASS
+reason = ELIGIBLE_EXPLICIT_RAW
+        ↓
+candidate MUST reach ranking
+        ↓
+raw_source has no authority baseline
+under context-hydration@1.0.1
+        ↓
+ranking rejects candidate:
+unknown_authority
+        ↓
+candidate MUST NOT appear in
+ContextPackage.retrieved
 ```
 
-This canonical scenario is distinct from H05. H05 remains unchanged: a non-explicit raw source is never automatically injected/retrieved.
+H03 vs H05 distinction (strengthened):
+
+- H03 canonical proof: provider invoked = YES; eligibility passed = YES; candidate reaches ranking = YES; final exclusion occurs at rankability with reason `unknown_authority`.
+- H05: provider invocation = NO for non-explicit raw access.
+
+A canonical H03 acceptance case is invalid if the raw provider is not invoked, the raw candidate does not pass eligibility, or the raw candidate does not reach ranking. H03 cannot be satisfied by an H05-style early absence. H05 remains unchanged: a non-explicit raw source is never automatically injected/retrieved.
 
 ### 12.3 Skill — S01–S10
 
