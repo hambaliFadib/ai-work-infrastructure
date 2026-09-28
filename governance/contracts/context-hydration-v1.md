@@ -450,7 +450,7 @@ Hard-limit evaluation MUST take precedence over override-required evaluation. Th
 |---|---|
 | H01 | Mandatory context always loaded |
 | H02 | Relevant curated item retrieved |
-| H03 | Irrelevant item excluded |
+| H03 | Irrelevant item excluded — policy-ineligible/final-inclusion-gate rejection; semantic relevance is a ranking factor, not an eligibility threshold (see 12.2.1) |
 | H04 | Foreign-job knowledge hard rejected |
 | H05 | Raw source not auto-injected |
 | H06 | Semantic relevance dominates recency appropriately |
@@ -465,6 +465,73 @@ Hard-limit evaluation MUST take precedence over override-required evaluation. Th
 | H15 | Omitted metadata safely persisted |
 | H16 | Retention policy applied |
 | H17 | Identical inputs/scope/policy produce identical ordering |
+
+#### 12.2.1 H03 — Final-Inclusion Semantics (policy 1.0.1)
+
+Non-behavior-changing governance clarification (issue #34).
+
+Under policy 1.0.1, H03 "Irrelevant item excluded" means a candidate that fails the locked final-inclusion gates must not appear in `ContextPackage.retrieved`. Semantic relevance is a ranking factor, not an eligibility threshold. A semantic relevance score of 0 alone does not make an otherwise eligible candidate ineligible.
+
+Explicit normative statements:
+
+- semantic relevance threshold = NONE in policy 1.0.1
+- Final inclusion requires the candidate to survive the applicable locked gates:
+  - retrieval access boundary
+  - eligibility gates
+  - ranking/rankability rules
+  - budget selection
+- A candidate rejected by those gates must not appear in `ContextPackage.retrieved`.
+- H03 MUST NOT mean: `semantic_relevance == 0 → reject`.
+
+Canonical deterministic H03 acceptance proof (correction for finding 4123353421):
+
+Deterministic preconditions — a canonical H03 acceptance case is INVALID unless all of the following hold:
+
+- P1 — Confidence permits candidate retrieval: the objective classifies as MEDIUM or HIGH (`objective.confidence >= 0.60`). LOW confidence is explicitly invalid for the canonical H03 proof because LOW disables all candidate retrieval before ranking.
+- P2 — Concrete raw request: `raw_source_request.explicit === true` and `raw_source_request.source_ids` contains the exact test candidate's `source_id` (example identity: `raw-h03-1`).
+- P3 — Provider available and invoked: a raw_source provider exists and MUST be invoked exactly as allowed by the existing retrieval contract; it returns the candidate carrying the concrete requested `source_id`.
+- P4 — Candidate survives retrieval filtering: the candidate passes the raw adapter's explicit source-id filter and is present in the retrieved candidate input to eligibility.
+- P5 — Candidate passes eligibility: eligibility MUST produce `eligible = true` with reason `ELIGIBLE_EXPLICIT_RAW`. The candidate is not LOW_CONFIDENCE_MANDATORY_ONLY, RAW_SOURCE_EXPLICIT_ONLY, FOREIGN_JOB_HARD_REJECT, or INVALID_CANDIDATE.
+- P6 — Candidate reaches ranking: the exact raw candidate MUST be passed to ranking. This is mandatory evidence.
+- P7 — Ranking rejects for authority: policy 1.0.1 defines no raw_source authority baseline, so ranking MUST fail-close the candidate with the existing `unknown_authority` rankability result.
+- P8 — Final ContextPackage exclusion: the candidate MUST NOT appear in `ContextPackage.retrieved`.
+
+Canonical flow (normative — MUST, never "may"):
+
+```
+objective confidence MEDIUM/HIGH (>= 0.60)
+        ↓
+explicit raw_source request
+        ↓
+concrete requested source_id
+        ↓
+raw provider MUST be invoked
+        ↓
+provider returns requested raw candidate
+        ↓
+candidate survives explicit source-id filtering
+        ↓
+eligibility MUST PASS
+reason = ELIGIBLE_EXPLICIT_RAW
+        ↓
+candidate MUST reach ranking
+        ↓
+raw_source has no authority baseline
+under context-hydration@1.0.1
+        ↓
+ranking rejects candidate:
+unknown_authority
+        ↓
+candidate MUST NOT appear in
+ContextPackage.retrieved
+```
+
+H03 vs H05 distinction (strengthened):
+
+- H03 canonical proof: provider invoked = YES; eligibility passed = YES; candidate reaches ranking = YES; final exclusion occurs at rankability with reason `unknown_authority`.
+- H05: provider invocation = NO for non-explicit raw access.
+
+A canonical H03 acceptance case is invalid if the raw provider is not invoked, the raw candidate does not pass eligibility, or the raw candidate does not reach ranking. H03 cannot be satisfied by an H05-style early absence. H05 remains unchanged: a non-explicit raw source is never automatically injected/retrieved.
 
 ### 12.3 Skill — S01–S10
 

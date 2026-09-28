@@ -523,6 +523,61 @@ test('C51 implementation-status parity exact', () => {
   assert.ok(archDoc.includes('#15'), 'Architecture must record #15 acceptance pending');
 });
 
+// C52: H03 acceptance semantics explicit and machine/human parity locked
+test('C52 H03 acceptance semantics explicit and parity locked', () => {
+  const semantics = policy.acceptance.hydration_semantics;
+  assert.ok(semantics, 'acceptance.hydration_semantics must exist');
+  const h03 = semantics.H03;
+  assert.ok(h03, 'acceptance.hydration_semantics.H03 must exist');
+  assert.strictEqual(h03.meaning, 'policy_ineligible_candidate_excluded');
+  assert.strictEqual(h03.semantic_relevance_is_ranking_factor, true);
+  assert.strictEqual(h03.semantic_relevance_threshold, null);
+  assert.strictEqual(h03.zero_semantic_relevance_alone_rejects, false);
+  assert.strictEqual(h03.final_inclusion_requires_locked_gates, true);
+  // Canonical proof machine requirements (finding 4123353421)
+  const proof = h03.canonical_proof;
+  assert.ok(proof, 'acceptance.hydration_semantics.H03.canonical_proof must exist');
+  assert.strictEqual(proof.minimum_confidence_level, 'MEDIUM');
+  assert.strictEqual(proof.minimum_confidence_score, 0.60);
+  assert.strictEqual(proof.raw_request_explicit, true);
+  assert.strictEqual(proof.requested_source_id_must_match, true);
+  assert.strictEqual(proof.provider_must_be_invoked, true);
+  assert.strictEqual(proof.eligibility_must_pass, true);
+  assert.strictEqual(proof.eligibility_reason, 'ELIGIBLE_EXPLICIT_RAW');
+  assert.strictEqual(proof.candidate_must_reach_ranking, true);
+  assert.strictEqual(proof.ranking_rejection, 'unknown_authority');
+  assert.strictEqual(proof.must_be_absent_from_retrieved, true);
+  // Human contract parity
+  assert.ok(
+    contractDoc.includes('semantic relevance threshold = NONE in policy 1.0.1'),
+    'Contract must state the semantic relevance threshold is NONE'
+  );
+  assert.ok(
+    contractDoc.includes('Semantic relevance is a ranking factor, not an eligibility threshold'),
+    'Contract must state semantic relevance is a ranking factor'
+  );
+  assert.ok(
+    contractDoc.includes('A semantic relevance score of 0 alone does not make an otherwise eligible candidate ineligible'),
+    'Contract must state zero semantic relevance alone does not reject'
+  );
+  assert.ok(contractDoc.includes('unknown_authority'), 'Contract must record the canonical unknown_authority H03 proof');
+  assert.ok(contractDoc.includes('| H03 |'), 'H03 must remain in the hydration acceptance table');
+  assert.ok(contractDoc.includes('| H05 | Raw source not auto-injected |'), 'H05 must remain unchanged');
+  // Human contract canonical-proof parity (finding 4123353421)
+  assert.ok(contractDoc.includes('MEDIUM or HIGH'), 'Contract must require MEDIUM or HIGH confidence');
+  assert.ok(contractDoc.includes('provider MUST be invoked'), 'Contract must require provider invocation');
+  assert.ok(contractDoc.includes('ELIGIBLE_EXPLICIT_RAW'), 'Contract must require ELIGIBLE_EXPLICIT_RAW eligibility');
+  assert.ok(contractDoc.includes('candidate MUST reach ranking'), 'Contract must require the candidate to reach ranking');
+  assert.ok(
+    contractDoc.includes('LOW confidence is explicitly invalid for the canonical H03 proof'),
+    'Contract must state LOW confidence is invalid for the canonical H03 proof'
+  );
+  assert.ok(
+    contractDoc.includes('A canonical H03 acceptance case is invalid if the raw provider is not invoked'),
+    'Contract must state the H03 case is invalid without provider invocation'
+  );
+});
+
 // Summary
 console.log(`\n=== Context Hydration Contract Test Summary ===`);
 console.log(`Cases: ${passed + failed}, Passed: ${passed}, Failed: ${failed}`);
