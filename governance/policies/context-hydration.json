@@ -301,6 +301,15 @@
     "objective_ids": ["O01", "O02", "O03", "O04", "O05", "O06", "O07", "O08", "O09", "O10"],
     "hydration_ids": ["H01", "H02", "H03", "H04", "H05", "H06", "H07", "H08", "H09", "H10", "H11", "H12", "H13", "H14", "H15", "H16", "H17"],
     "skill_ids": ["S01", "S02", "S03", "S04", "S05", "S06", "S07", "S08", "S09", "S10"],
-    "total": 37
+    "total": 37,
+    "hydration_semantics": {
+      "H03": {
+        "meaning": "policy_ineligible_candidate_excluded",
+        "semantic_relevance_is_ranking_factor": true,
+        "semantic_relevance_threshold": null,
+        "zero_semantic_relevance_alone_rejects": false,
+        "final_inclusion_requires_locked_gates": true
+      }
+    }
   }
 }

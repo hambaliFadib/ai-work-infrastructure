@@ -450,7 +450,7 @@ Hard-limit evaluation MUST take precedence over override-required evaluation. Th
 |---|---|
 | H01 | Mandatory context always loaded |
 | H02 | Relevant curated item retrieved |
-| H03 | Irrelevant item excluded |
+| H03 | Irrelevant item excluded — policy-ineligible/final-inclusion-gate rejection; semantic relevance is a ranking factor, not an eligibility threshold (see 12.2.1) |
 | H04 | Foreign-job knowledge hard rejected |
 | H05 | Raw source not auto-injected |
 | H06 | Semantic relevance dominates recency appropriately |
@@ -465,6 +465,41 @@ Hard-limit evaluation MUST take precedence over override-required evaluation. Th
 | H15 | Omitted metadata safely persisted |
 | H16 | Retention policy applied |
 | H17 | Identical inputs/scope/policy produce identical ordering |
+
+#### 12.2.1 H03 — Final-Inclusion Semantics (policy 1.0.1)
+
+Non-behavior-changing governance clarification (issue #34).
+
+Under policy 1.0.1, H03 "Irrelevant item excluded" means a candidate that fails the locked final-inclusion gates must not appear in `ContextPackage.retrieved`. Semantic relevance is a ranking factor, not an eligibility threshold. A semantic relevance score of 0 alone does not make an otherwise eligible candidate ineligible.
+
+Explicit normative statements:
+
+- semantic relevance threshold = NONE in policy 1.0.1
+- Final inclusion requires the candidate to survive the applicable locked gates:
+  - retrieval access boundary
+  - eligibility gates
+  - ranking/rankability rules
+  - budget selection
+- A candidate rejected by those gates must not appear in `ContextPackage.retrieved`.
+- H03 MUST NOT mean: `semantic_relevance == 0 → reject`.
+
+Canonical deterministic H03 acceptance proof:
+
+```
+explicit raw_source requested
+        ↓
+raw provider may be invoked
+        ↓
+candidate may cross the explicit retrieval/eligibility boundary
+        ↓
+raw_source has no authority baseline under policy 1.0.1
+        ↓
+ranking rejects the candidate as unknown_authority
+        ↓
+candidate does not appear in ContextPackage.retrieved
+```
+
+This canonical scenario is distinct from H05. H05 remains unchanged: a non-explicit raw source is never automatically injected/retrieved.
 
 ### 12.3 Skill — S01–S10
 

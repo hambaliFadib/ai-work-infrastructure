@@ -523,6 +523,35 @@ test('C51 implementation-status parity exact', () => {
   assert.ok(archDoc.includes('#15'), 'Architecture must record #15 acceptance pending');
 });
 
+// C52: H03 acceptance semantics explicit and machine/human parity locked
+test('C52 H03 acceptance semantics explicit and parity locked', () => {
+  const semantics = policy.acceptance.hydration_semantics;
+  assert.ok(semantics, 'acceptance.hydration_semantics must exist');
+  const h03 = semantics.H03;
+  assert.ok(h03, 'acceptance.hydration_semantics.H03 must exist');
+  assert.strictEqual(h03.meaning, 'policy_ineligible_candidate_excluded');
+  assert.strictEqual(h03.semantic_relevance_is_ranking_factor, true);
+  assert.strictEqual(h03.semantic_relevance_threshold, null);
+  assert.strictEqual(h03.zero_semantic_relevance_alone_rejects, false);
+  assert.strictEqual(h03.final_inclusion_requires_locked_gates, true);
+  // Human contract parity
+  assert.ok(
+    contractDoc.includes('semantic relevance threshold = NONE in policy 1.0.1'),
+    'Contract must state the semantic relevance threshold is NONE'
+  );
+  assert.ok(
+    contractDoc.includes('Semantic relevance is a ranking factor, not an eligibility threshold'),
+    'Contract must state semantic relevance is a ranking factor'
+  );
+  assert.ok(
+    contractDoc.includes('A semantic relevance score of 0 alone does not make an otherwise eligible candidate ineligible'),
+    'Contract must state zero semantic relevance alone does not reject'
+  );
+  assert.ok(contractDoc.includes('unknown_authority'), 'Contract must record the canonical unknown_authority H03 proof');
+  assert.ok(contractDoc.includes('| H03 |'), 'H03 must remain in the hydration acceptance table');
+  assert.ok(contractDoc.includes('| H05 | Raw source not auto-injected |'), 'H05 must remain unchanged');
+});
+
 // Summary
 console.log(`\n=== Context Hydration Contract Test Summary ===`);
 console.log(`Cases: ${passed + failed}, Passed: ${passed}, Failed: ${failed}`);
