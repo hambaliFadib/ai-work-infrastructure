@@ -125,9 +125,9 @@ if (process.argv.includes(WORKER_FLAG)) {
   process.exit(runFixtureWorker() ? 0 : 1);
 }
 
-// R01: registry contains exactly 8 known suites
-test('R01 registry contains exactly 8 known suites', () => {
-  assert.strictEqual(SUITE_REGISTRY.length, 8, `Expected 8 suites, got ${SUITE_REGISTRY.length}`);
+// R01: registry contains exactly 9 known suites
+test('R01 registry contains exactly 9 known suites', () => {
+  assert.strictEqual(SUITE_REGISTRY.length, 9, `Expected 9 suites, got ${SUITE_REGISTRY.length}`);
 });
 
 // R02: contract.test.js is required
@@ -344,6 +344,14 @@ testAsync('R15 integration.test.js is registered and required', () => {
   assert.ok(integration, 'integration suite must exist');
   assert.strictEqual(integration.required, true, 'integration must be required');
   assert.strictEqual(integration.file, 'integration.test.js');
+});
+
+// R16: acceptance.test.js is registered and required
+testAsync('R16 acceptance.test.js is registered and required', () => {
+  const acceptance = SUITE_REGISTRY.find(s => s.name === 'acceptance');
+  assert.ok(acceptance, 'acceptance suite must exist');
+  assert.strictEqual(acceptance.required, true, 'acceptance must be required');
+  assert.strictEqual(acceptance.file, 'acceptance.test.js');
 });
 
 async function main() {

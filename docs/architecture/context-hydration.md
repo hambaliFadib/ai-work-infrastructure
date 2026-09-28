@@ -1,7 +1,7 @@
 # Context Hydration — Architecture Document
 
 **Status:** CONTRACT LOCKED
-**Implementation:** PIPELINE IMPLEMENTED — ACCEPTANCE PENDING (#15)
+**Implementation:** PHASE 9A VERIFIED — 37/37 ACCEPTANCE
 **Policy:** context-hydration@1.0.1
 **Supersedes:** context-hydration@1.0.0 (initial merged contract, historical)
 
@@ -15,10 +15,21 @@ Implementation status (policy context-hydration@1.0.1):
 
 - Five component modules implemented: Objective Parser (#9), Ranking (#10), Retrieval/Eligibility (#11), Budget/ContextPackage (#12), Skill Resolver (#13)
 - hydrateContext orchestrator implemented (#14)
-- Component + integration runner green: 8/8 (registered 8, executed 8, passed 8, skipped 0, failed 0)
-- Phase 9A acceptance 37/37 still pending #15
+- H03 acceptance semantics lock implemented (#34)
+- Acceptance suite implemented and registered as a required runner suite (#15)
+- Full runner green: 9/9 (registered 9, executed 9, passed 9, skipped 0, failed 0)
 
-Phase 9A acceptance closure (#15) remains pending; neither completion nor an architecture freeze is claimed.
+Acceptance results (Phase 9A):
+
+- O = 10/10
+- H = 17/17
+- S = 10/10
+- TOTAL = 37/37
+- Phase 9A = VERIFIED
+
+Architecture Freeze v1 NOT claimed here.
+
+Architecture Freeze requires Phase 9A, Phase 9B, and Phase 9C VERIFIED.
 
 ---
 

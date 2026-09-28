@@ -1,7 +1,7 @@
 # Context Hydration v1 — Governance Contract
 
 **Status:** CONTRACT LOCKED
-**Implementation:** PIPELINE IMPLEMENTED — ACCEPTANCE PENDING (#15)
+**Implementation:** PHASE 9A VERIFIED — 37/37 ACCEPTANCE
 **Policy:** context-hydration@1.0.1
 **Policy ID:** context-hydration
 **Policy Version:** 1.0.1
@@ -552,6 +552,8 @@ A canonical H03 acceptance case is invalid if the raw provider is not invoked, t
 
 10 + 17 + 10 = **37**
 
+Phase 9A acceptance status: VERIFIED — O 10/10, H 17/17, S 10/10, TOTAL 37/37
+
 ---
 
 ## 13. Issue Ownership
@@ -661,7 +663,7 @@ Guard errors are not chain decision outcomes. Machine policy: `skills.guard_erro
 ### 14.7 D7 — Implementation Status
 
 Status: CONTRACT LOCKED
-Implementation: PIPELINE IMPLEMENTED — ACCEPTANCE PENDING (#15)
+Implementation: PHASE 9A VERIFIED — 37/37 ACCEPTANCE
 
 - Objective Parser implemented
 - Ranking implemented
@@ -669,5 +671,6 @@ Implementation: PIPELINE IMPLEMENTED — ACCEPTANCE PENDING (#15)
 - Budget/ContextPackage implemented
 - Skill Resolver implemented
 - hydrateContext integration orchestrator implemented (#14)
-- Component + integration runner verified 8/8
-- Acceptance 37/37 still pending #15
+- H03 acceptance semantics lock implemented (#34)
+- Component + integration + acceptance runner verified 9/9
+- Acceptance 37/37 VERIFIED — O 10/10, H 17/17, S 10/10
