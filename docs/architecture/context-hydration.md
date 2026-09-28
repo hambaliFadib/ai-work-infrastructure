@@ -1,7 +1,7 @@
 # Context Hydration — Architecture Document
 
 **Status:** CONTRACT LOCKED
-**Implementation:** COMPONENTS IMPLEMENTED — INTEGRATION PENDING (#14)
+**Implementation:** PIPELINE IMPLEMENTED — ACCEPTANCE PENDING (#15)
 **Policy:** context-hydration@1.0.1
 **Supersedes:** context-hydration@1.0.0 (initial merged contract, historical)
 
@@ -13,16 +13,12 @@ Context Hydration v1 defines the deterministic pipeline for assembling session c
 
 Implementation status (policy context-hydration@1.0.1):
 
-- Objective Parser — implemented (#9)
-- Ranking — implemented (#10)
-- Retrieval/Eligibility — implemented (#11)
-- Budget/ContextPackage — implemented (#12)
-- Skill Resolver — implemented (#13)
-- Component runner verified 7/7 (contract, runner, objective-parser, ranking-policy, retrieval-eligibility, budget-dedup, skill-resolver)
-- Complete pipeline assembly still pending #14
-- Acceptance 37/37 still pending #15
+- Five component modules implemented: Objective Parser (#9), Ranking (#10), Retrieval/Eligibility (#11), Budget/ContextPackage (#12), Skill Resolver (#13)
+- hydrateContext orchestrator implemented (#14)
+- Component + integration runner green: 8/8 (registered 8, executed 8, passed 8, skipped 0, failed 0)
+- Phase 9A acceptance 37/37 still pending #15
 
-Phase 9A completion remains pending integration (#14) and acceptance closure (#15); neither is claimed complete.
+Phase 9A acceptance closure (#15) remains pending; neither completion nor an architecture freeze is claimed.
 
 ---
 
