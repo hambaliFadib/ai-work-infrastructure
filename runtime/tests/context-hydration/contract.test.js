@@ -228,9 +228,10 @@ test('C26 contract document references policy version', () => {
 // C27: architecture doc implementation status exact
 test('C27 architecture doc implementation status exact', () => {
   assert.ok(archDoc.includes('CONTRACT LOCKED'), 'Architecture doc must say CONTRACT LOCKED');
-  assert.ok(archDoc.includes('PIPELINE IMPLEMENTED'), 'Architecture doc must say PIPELINE IMPLEMENTED');
-  assert.ok(archDoc.includes('ACCEPTANCE PENDING'), 'Architecture doc must say ACCEPTANCE PENDING');
-  assert.ok(archDoc.includes('#15'), 'Architecture doc must reference #15');
+  assert.ok(archDoc.includes('PHASE 9A VERIFIED'), 'Architecture doc must say PHASE 9A VERIFIED');
+  assert.ok(archDoc.includes('37/37'), 'Architecture doc must record 37/37');
+  assert.ok(archDoc.includes('9/9'), 'Architecture doc must record full runner 9/9');
+  assert.ok(!archDoc.includes('ACCEPTANCE PENDING'), 'Architecture doc must not claim ACCEPTANCE PENDING');
   assert.ok(!archDoc.includes('INTEGRATION PENDING'), 'Architecture doc must not claim INTEGRATION PENDING');
   assert.ok(!archDoc.includes('NOT YET IMPLEMENTED'), 'Architecture doc must not claim NOT YET IMPLEMENTED');
 });
@@ -510,17 +511,18 @@ test('C50 resolver guard errors exact', () => {
 
 // C51: implementation-status parity exact
 test('C51 implementation-status parity exact', () => {
-  const markers = ['CONTRACT LOCKED', 'PIPELINE IMPLEMENTED', 'ACCEPTANCE PENDING', '#15'];
+  const markers = ['CONTRACT LOCKED', 'PHASE 9A VERIFIED', '37/37'];
   for (const marker of markers) {
     assert.ok(contractDoc.includes(marker), `Contract must contain ${marker}`);
     assert.ok(archDoc.includes(marker), `Architecture must contain ${marker}`);
   }
+  assert.ok(archDoc.includes('9/9'), 'Architecture must record full runner 9/9');
+  assert.ok(!contractDoc.includes('ACCEPTANCE PENDING'), 'Contract must not claim ACCEPTANCE PENDING');
+  assert.ok(!archDoc.includes('ACCEPTANCE PENDING'), 'Architecture must not claim ACCEPTANCE PENDING');
   assert.ok(!contractDoc.includes('INTEGRATION PENDING'), 'Contract must not claim INTEGRATION PENDING');
   assert.ok(!archDoc.includes('INTEGRATION PENDING'), 'Architecture must not claim INTEGRATION PENDING');
   assert.ok(!contractDoc.includes('NOT YET IMPLEMENTED'), 'Contract must not claim NOT YET IMPLEMENTED');
   assert.ok(!archDoc.includes('NOT YET IMPLEMENTED'), 'Architecture must not claim NOT YET IMPLEMENTED');
-  assert.ok(archDoc.includes('8/8'), 'Architecture must record full runner verification 8/8');
-  assert.ok(archDoc.includes('#15'), 'Architecture must record #15 acceptance pending');
 });
 
 // C52: H03 acceptance semantics explicit and machine/human parity locked

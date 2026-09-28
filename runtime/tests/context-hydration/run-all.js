@@ -25,6 +25,7 @@ const SUITE_REGISTRY = [
   { name: 'budget-dedup',            file: 'budget-dedup.test.js',          required: false },
   { name: 'skill-resolver',          file: 'skill-resolver.test.js',        required: false },
   { name: 'integration',             file: 'integration.test.js',           required: true  },
+  { name: 'acceptance',              file: 'acceptance.test.js',            required: true  },
 ];
 
 const DIR = __dirname;
