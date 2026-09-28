@@ -9,9 +9,12 @@
  *   S01-S10 = 10  (Skills)
  *
  * Primarily exercises the public integrated boundary hydrateContext().
- * Lower-level exported runtime APIs are used only where the invariant
- * concerns behavior that cannot be observed completely through the
- * integrated package (H03 rankability chain, H16 retention store).
+ * H03 additionally uses test-only in-process instrumentation: the
+ * retrieval / eligibility / ranking module exports are wrapped with
+ * tracing delegates and a fresh hydrateContext module instance is loaded
+ * so the same-invocation trace is tied to one integrated call. H16 uses
+ * createOmissionStore for the retention boundary. Production source files
+ * are never modified.
  *
  * Deterministic. No network. No DB. No env reads. No wall-clock reads.
  * All timestamps are explicit. Retrieval providers are deterministic
@@ -25,9 +28,9 @@
 const assert = require('assert');
 
 const { hydrateContext } = require('../../context-hydration/hydrator.js');
-const { createRetrievalRegistry, retrieveCandidates } = require('../../context-hydration/retrieval-adapters.js');
-const { evaluateEligibility } = require('../../context-hydration/eligibility-gates.js');
-const { rankCandidates } = require('../../context-hydration/ranking-policy.js');
+const retrievalAdapters = require('../../context-hydration/retrieval-adapters.js');
+const eligibilityGates = require('../../context-hydration/eligibility-gates.js');
+const rankingPolicy = require('../../context-hydration/ranking-policy.js');
 const { createOmissionStore } = require('../../context-hydration/context-package.js');
 const { BudgetError } = require('../../context-hydration/budget.js');
 const { SkillResolverError } = require('../../context-hydration/skill-resolver.js');
@@ -175,6 +178,90 @@ function baseParams(overrides = {}) {
     retrieval_providers: {},
     skills: [],
     ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Test-only same-invocation instrumentation (H03)
+// ---------------------------------------------------------------------------
+
+const HYDRATOR_PATH = require.resolve('../../context-hydration/hydrator.js');
+
+/**
+ * Test-only instrumentation helper (finding 4124214435).
+ *
+ * Wraps the retrieval / eligibility / ranking module exports with tracing
+ * delegates, then fresh-loads hydrator.js so its destructured dependencies
+ * point at the wrappers. Each wrapper records deterministic trace metadata
+ * and calls the original function with the original arguments, returning
+ * the original result unchanged — no behavior change, no result
+ * replacement, no candidate modification, no error swallowing.
+ *
+ * Cache discipline: the original dependency exports are restored
+ * immediately after the fresh hydrator captures them; the instrumented
+ * hydrator cache entry is removed in dispose() and the normal hydrator
+ * instance is reloaded so Node module state is equivalent to the pre-test
+ * state. Production source files are never touched.
+ */
+function loadInstrumentedHydrator(trace) {
+  const originals = {
+    retrieveCandidates: retrievalAdapters.retrieveCandidates,
+    evaluateEligibility: eligibilityGates.evaluateEligibility,
+    rankCandidates: rankingPolicy.rankCandidates,
+  };
+
+  retrievalAdapters.retrieveCandidates = function tracedRetrieveCandidates(registry, context) {
+    trace.calls.retrieveCandidates += 1;
+    const result = originals.retrieveCandidates(registry, context);
+    trace.retrieval.push({
+      candidate_ids: result.candidates.map((candidate) =>
+        (candidate !== null && typeof candidate === 'object' ? candidate.source_id : null)),
+    });
+    return result;
+  };
+
+  eligibilityGates.evaluateEligibility = function tracedEvaluateEligibility(candidates, context) {
+    trace.calls.evaluateEligibility += 1;
+    const result = originals.evaluateEligibility(candidates, context);
+    trace.eligibility.push({
+      decisions: result.decisions.map((decision) => ({
+        source_id: decision.source_id,
+        eligible: decision.eligible,
+        reason: decision.reason,
+      })),
+    });
+    return result;
+  };
+
+  rankingPolicy.rankCandidates = function tracedRankCandidates(input) {
+    trace.calls.rankCandidates += 1;
+    const inputIds = input.candidates.map((candidate) =>
+      (candidate !== null && typeof candidate === 'object' ? candidate.source_id : null));
+    const result = originals.rankCandidates(input);
+    trace.ranking.push({
+      input_ids: inputIds,
+      ranked_ids: result.ranked.map((record) => record.source_id),
+      rejected: result.rejected.map((record) => ({ source_id: record.source_id, reason: record.reason })),
+    });
+    return result;
+  };
+
+  let freshHydrateContext = null;
+  try {
+    delete require.cache[HYDRATOR_PATH];
+    freshHydrateContext = require(HYDRATOR_PATH).hydrateContext;
+  } finally {
+    retrievalAdapters.retrieveCandidates = originals.retrieveCandidates;
+    eligibilityGates.evaluateEligibility = originals.evaluateEligibility;
+    rankingPolicy.rankCandidates = originals.rankCandidates;
+  }
+
+  return {
+    hydrateContext: freshHydrateContext,
+    dispose() {
+      delete require.cache[HYDRATOR_PATH];
+      require(HYDRATOR_PATH);
+    },
   };
 }
 
@@ -349,48 +436,59 @@ hydration('H03', 'Irrelevant item excluded', () => {
   const raw = rawCandidate({ source_id: 'raw-h03-1' });
   const rawRequest = { explicit: true, source_ids: ['raw-h03-1'] };
   const { providers, calls } = makeProviderEnv({ raw_source: [raw] });
-  const result = hydrateContext(baseParams({ retrieval_providers: providers, raw_source_request: rawRequest }));
+
+  // Same-invocation proof: trace the retrieval / eligibility / ranking
+  // dependencies captured by ONE fresh hydrateContext invocation.
+  const trace = {
+    calls: { retrieveCandidates: 0, evaluateEligibility: 0, rankCandidates: 0 },
+    retrieval: [],
+    eligibility: [],
+    ranking: [],
+  };
+  const instrumented = loadInstrumentedHydrator(trace);
+  let result = null;
+  try {
+    result = instrumented.hydrateContext(baseParams({ retrieval_providers: providers, raw_source_request: rawRequest }));
+  } finally {
+    instrumented.dispose();
+  }
   const pkg = result.context_package;
 
   // P1: MEDIUM/HIGH confidence permits candidate retrieval (LOW is invalid for H03).
   assert.ok(pkg.objective.confidence >= 0.60, 'objective confidence must be MEDIUM/HIGH for H03');
-  // P3: the raw provider MUST be invoked (fails H03 if it was not).
-  assert.strictEqual(calls.raw_source, 1, 'raw provider MUST be invoked for the explicit request');
-  // P8: the candidate MUST NOT appear in retrieved.
+  // P2/P3: exact requested identity; raw provider MUST be invoked exactly once.
+  assert.strictEqual(calls.raw_source, 1, 'raw provider MUST be invoked exactly once');
+
+  // Each traced stage must be reached exactly once in the same invocation.
+  assert.strictEqual(trace.calls.retrieveCandidates, 1, 'retrieveCandidates must be called exactly once');
+  assert.strictEqual(trace.calls.evaluateEligibility, 1, 'evaluateEligibility must be called exactly once');
+  assert.strictEqual(trace.calls.rankCandidates, 1, 'rankCandidates must be called exactly once');
+  assert.strictEqual(trace.retrieval.length, 1);
+  assert.strictEqual(trace.eligibility.length, 1);
+  assert.strictEqual(trace.ranking.length, 1);
+
+  // P4: retrieval output contains the exact requested raw candidate.
+  assert.ok(trace.retrieval[0].candidate_ids.includes('raw-h03-1'), 'retrieval output must include raw-h03-1');
+
+  // P5: eligibility passes the exact candidate as ELIGIBLE_EXPLICIT_RAW.
+  const decision = trace.eligibility[0].decisions.find((entry) => entry.source_id === 'raw-h03-1');
+  assert.ok(decision, 'eligibility must see raw-h03-1');
+  assert.strictEqual(decision.eligible, true, 'raw-h03-1 must pass eligibility');
+  assert.strictEqual(decision.reason, 'ELIGIBLE_EXPLICIT_RAW');
+
+  // P6/P7: the same candidate reaches ranking and is rejected as unknown_authority.
+  assert.ok(trace.ranking[0].input_ids.includes('raw-h03-1'), 'ranking input must include raw-h03-1');
+  assert.ok(!trace.ranking[0].ranked_ids.includes('raw-h03-1'), 'ranked output must not include raw-h03-1');
+  assert.deepStrictEqual(
+    trace.ranking[0].rejected,
+    [{ source_id: 'raw-h03-1', reason: 'unknown_authority' }],
+    'ranking must record the unknown_authority rejection for raw-h03-1'
+  );
+
+  // P8: the candidate MUST NOT appear in the final ContextPackage retrieved set.
   assert.strictEqual(pkg.retrieved.length, 0, 'raw candidate must be absent from retrieved');
   assert.strictEqual(pkg.omitted.length, 0);
-
-  // P4-P7: non-vacuous chain — adapter filter, eligibility pass, ranking rejection.
-  const registry = createRetrievalRegistry({ raw_source: () => [raw] });
-  const retrieval = retrieveCandidates(registry, {
-    objective_confidence: pkg.objective.confidence,
-    active_job_id: JOB_ID,
-    active_session_id: SESSION_ID,
-    hydration_started_at: HYDRATION_STARTED_AT,
-    raw_source_request: rawRequest,
-  });
-  assert.deepStrictEqual(
-    retrieval.candidates.map((candidate) => candidate.source_id),
-    ['raw-h03-1'],
-    'candidate MUST survive the explicit source-id adapter filter'
-  );
-  const eligibility = evaluateEligibility(retrieval.candidates, {
-    active_job_id: JOB_ID,
-    active_session_id: SESSION_ID,
-    objective_confidence: pkg.objective.confidence,
-    raw_source_request: rawRequest,
-  });
-  assert.strictEqual(eligibility.eligible.length, 1, 'candidate MUST pass eligibility');
-  assert.strictEqual(eligibility.eligible[0].reason, 'ELIGIBLE_EXPLICIT_RAW');
-  const ranking = rankCandidates({
-    objective_retrieval_terms: pkg.objective.retrieval_terms,
-    candidates: eligibility.eligible.map((decision) => decision.candidate),
-    active_job_id: JOB_ID,
-    active_session_id: SESSION_ID,
-    hydration_started_at: HYDRATION_STARTED_AT,
-  });
-  assert.strictEqual(ranking.ranked.length, 0, 'candidate MUST reach ranking and be rejected there');
-  assert.deepStrictEqual(ranking.rejected, [{ source_id: 'raw-h03-1', reason: 'unknown_authority' }]);
+  assert.ok(!JSON.stringify(pkg.retrieved).includes('raw-h03-1'));
 });
 
 hydration('H04', 'Foreign-job knowledge hard rejected', () => {
