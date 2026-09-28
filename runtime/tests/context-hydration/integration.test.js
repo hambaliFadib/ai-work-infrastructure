@@ -4,7 +4,7 @@
  * Policy: context-hydration@1.0.1
  * Lane: #14 — hydrateContext integration orchestrator.
  *
- * Coverage (I01-I20):
+ * Coverage (I01-I27):
  *  - I01 happy-path curated retrieval produces ContextPackage
  *  - I02 identical deterministic input produces identical output
  *  - I03 LOW confidence invokes zero providers and returns mandatory-only package
@@ -25,6 +25,13 @@
  *  - I18 representative inputs are not mutated
  *  - I19 malformed ranking candidate fails closed
  *  - I20 explicit hydration_run_id and hydration_started_at are preserved exactly
+ *  - I21 checkpoint object declared with matching mandatory record succeeds
+ *  - I22 string checkpoint declared with matching mandatory checkpoint succeeds
+ *  - I23 checkpoint declared without matching mandatory record fails closed
+ *  - I24 mismatched checkpoint identity fails closed
+ *  - I25 no checkpoint declared keeps existing mandatory behavior unchanged
+ *  - I26 checkpoint record is never treated as a retrieval candidate
+ *  - I27 checkpoint inputs remain unchanged after successful hydration
  *
  * Deterministic. No network. No DB. No env reads. No wall-clock reads.
  * No memory service. Every retrieval provider is caller-injected.
@@ -86,7 +93,12 @@ function budgetInputs(overrides = {}) {
 function mandatoryRecords() {
   return [
     { source_id: 'mand-approval', source_type: 'mandatory', category: 'approval_state' },
-    { source_id: 'mand-checkpoint', source_type: 'mandatory', category: 'latest_valid_checkpoint' },
+    {
+      source_id: 'mand-checkpoint',
+      source_type: 'mandatory',
+      category: 'latest_valid_checkpoint',
+      checkpoint_id: 'checkpoint-7',
+    },
   ];
 }
 
@@ -705,6 +717,196 @@ test('I20 explicit hydration_run_id and hydration_started_at are preserved exact
   assert.strictEqual(pkg.omitted[0].hydration_run_id, runId);
   assert.strictEqual(pkg.omitted[0].omitted_at, anchor);
   assert.strictEqual(pkg.omitted[0].expires_at, '2026-10-27T10:20:30.123456Z');
+});
+
+// ---------------------------------------------------------------------------
+// I21-I27: mandatory checkpoint invariant
+// ---------------------------------------------------------------------------
+
+// I21: checkpoint object declared with matching mandatory record succeeds
+test('I21 checkpoint object declared with matching mandatory record succeeds', () => {
+  const checkpointRecord = {
+    source_id: 'mand-checkpoint',
+    source_type: 'mandatory',
+    category: 'latest_valid_checkpoint',
+    checkpoint_id: 'cp-123',
+    payload: { state: 'safe' },
+  };
+  const { providers } = makeProviderEnv({ curated: [curatedCandidate()] });
+  const result = hydrateContext(baseParams({
+    latest_checkpoint: { checkpoint_id: 'cp-123' },
+    mandatory: [checkpointRecord],
+    retrieval_providers: providers,
+  }));
+  const pkg = result.context_package;
+
+  assert.strictEqual(pkg.objective.provenance.checkpoint_id, 'cp-123');
+  assert.deepStrictEqual(pkg.mandatory, [checkpointRecord]);
+  assert.strictEqual(pkg.retrieved.length, 1);
+  assert.strictEqual(pkg.retrieved[0].source_id, 'curated-1');
+  assert.deepStrictEqual(pkg.omitted, []);
+  assert.ok(
+    !JSON.stringify(pkg.retrieved).includes('cp-123'),
+    'checkpoint must never compete in ranking'
+  );
+});
+
+// I22: string checkpoint declared with matching mandatory checkpoint succeeds
+test('I22 string checkpoint declared with matching mandatory checkpoint succeeds', () => {
+  const checkpointRecord = {
+    source_id: 'mand-checkpoint',
+    source_type: 'mandatory',
+    checkpoint_id: 'cp-123',
+  };
+  const result = hydrateContext(baseParams({
+    latest_checkpoint: 'cp-123',
+    mandatory: [checkpointRecord],
+  }));
+  const pkg = result.context_package;
+
+  assert.strictEqual(pkg.objective.provenance.checkpoint_id, 'cp-123');
+  assert.deepStrictEqual(pkg.mandatory, [checkpointRecord]);
+});
+
+// I23: checkpoint declared without matching mandatory record fails closed
+test('I23 checkpoint declared without matching mandatory record fails closed', () => {
+  const expectedMessage = 'latest_checkpoint must be represented in mandatory context by matching checkpoint_id';
+
+  // (a) mandatory is empty
+  const envA = makeProviderEnv({ curated: [curatedCandidate()] });
+  const storeA = createOmissionStore();
+  let errorA = null;
+  try {
+    hydrateContext(baseParams({
+      latest_checkpoint: { checkpoint_id: 'cp-123' },
+      mandatory: [],
+      retrieval_providers: envA.providers,
+      omission_store: storeA,
+    }));
+  } catch (e) {
+    errorA = e;
+  }
+  assert.ok(errorA instanceof TypeError, `expected TypeError, got ${errorA && errorA.name}`);
+  assert.strictEqual(errorA.message, expectedMessage);
+  assert.strictEqual(envA.calls.curated, 0, 'providers must not be invoked when the checkpoint assertion fails');
+  assert.strictEqual(storeA.list(HYDRATION_STARTED_AT).length, 0, 'omission store must not be written when the checkpoint assertion fails');
+
+  // (b) mandatory records exist but none carries a matching checkpoint_id
+  const envB = makeProviderEnv({ curated: [curatedCandidate()] });
+  let errorB = null;
+  try {
+    hydrateContext(baseParams({
+      latest_checkpoint: { checkpoint_id: 'cp-123' },
+      mandatory: [{ source_id: 'mand-approval', source_type: 'mandatory', category: 'approval_state' }],
+      retrieval_providers: envB.providers,
+    }));
+  } catch (e) {
+    errorB = e;
+  }
+  assert.ok(errorB instanceof TypeError);
+  assert.strictEqual(errorB.message, expectedMessage);
+  assert.strictEqual(envB.calls.curated, 0);
+});
+
+// I24: mismatched checkpoint identity fails closed
+test('I24 mismatched checkpoint identity fails closed', () => {
+  const env = makeProviderEnv({ curated: [curatedCandidate()] });
+  const store = createOmissionStore();
+  let error = null;
+  try {
+    hydrateContext(baseParams({
+      latest_checkpoint: { checkpoint_id: 'cp-123' },
+      mandatory: [{ source_id: 'mand-checkpoint', source_type: 'mandatory', checkpoint_id: 'cp-OTHER' }],
+      retrieval_providers: env.providers,
+      omission_store: store,
+    }));
+  } catch (e) {
+    error = e;
+  }
+  assert.ok(error instanceof TypeError, `expected TypeError, got ${error && error.name}`);
+  assert.strictEqual(error.message, 'latest_checkpoint must be represented in mandatory context by matching checkpoint_id');
+  assert.strictEqual(env.calls.curated, 0);
+  assert.strictEqual(store.list(HYDRATION_STARTED_AT).length, 0);
+});
+
+// I25: no checkpoint declared keeps existing mandatory behavior unchanged
+test('I25 no checkpoint declared keeps existing mandatory behavior unchanged', () => {
+  // (a) null checkpoint with the standard mandatory set
+  const resultA = hydrateContext(baseParams({ latest_checkpoint: null }));
+  assert.strictEqual(resultA.context_package.objective.provenance.checkpoint_id, null);
+  assert.deepStrictEqual(resultA.context_package.mandatory, mandatoryRecords());
+
+  // (b) absent checkpoint with mandatory records that carry no checkpoint_id
+  const mandatoryB = [{ source_id: 'mand-only', source_type: 'mandatory' }];
+  const resultB = hydrateContext(baseParams({ latest_checkpoint: undefined, mandatory: mandatoryB }));
+  assert.strictEqual(resultB.context_package.objective.provenance.checkpoint_id, null);
+  assert.deepStrictEqual(resultB.context_package.mandatory, mandatoryB);
+});
+
+// I26: checkpoint record is never treated as a retrieval candidate
+test('I26 checkpoint record is never treated as a retrieval candidate', () => {
+  const checkpointRecord = {
+    source_id: 'mand-checkpoint',
+    source_type: 'mandatory',
+    category: 'latest_valid_checkpoint',
+    checkpoint_id: 'cp-123',
+    estimated_tokens: 999999,
+    payload: { state: 'safe' },
+  };
+  const { providers, calls } = makeProviderEnv({
+    curated: [curatedCandidate({ estimated_tokens: 100 })],
+  });
+  const result = hydrateContext(baseParams({
+    latest_checkpoint: { checkpoint_id: 'cp-123' },
+    mandatory: [checkpointRecord],
+    retrieval_providers: providers,
+  }));
+  const pkg = result.context_package;
+
+  assert.strictEqual(calls.curated, 1);
+  assert.strictEqual(pkg.retrieved.length, 1);
+  assert.strictEqual(pkg.retrieved[0].source_id, 'curated-1');
+  assert.deepStrictEqual(pkg.omitted, []);
+  assert.ok(!JSON.stringify(pkg.retrieved).includes('cp-123'), 'checkpoint must not enter retrieval results');
+  assert.ok(!JSON.stringify(pkg.omitted).includes('cp-123'), 'checkpoint must not enter omitted metadata');
+
+  // Only the curated candidate consumes the retrieval budget.
+  assert.strictEqual(pkg.budget.retrieved_tokens_used, 100);
+
+  // The checkpoint exists only in mandatory context (verbatim) and provenance.
+  assert.deepStrictEqual(pkg.mandatory, [checkpointRecord]);
+  assert.strictEqual(pkg.objective.provenance.checkpoint_id, 'cp-123');
+  assert.ok(!Object.prototype.hasOwnProperty.call(pkg.mandatory[0], 'rank'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(pkg.mandatory[0], 'score'));
+});
+
+// I27: checkpoint inputs remain unchanged after successful hydration
+test('I27 checkpoint inputs remain unchanged after successful hydration', () => {
+  const latestCheckpoint = { checkpoint_id: 'cp-123' };
+  const checkpointRecord = {
+    source_id: 'mand-checkpoint',
+    source_type: 'mandatory',
+    checkpoint_id: 'cp-123',
+    payload: { state: 'safe' },
+  };
+  const mandatory = [checkpointRecord];
+
+  const snapshot = (value) => JSON.parse(JSON.stringify(value));
+  const checkpointBefore = snapshot(latestCheckpoint);
+  const mandatoryBefore = snapshot(mandatory);
+  const recordBefore = snapshot(checkpointRecord);
+
+  const result = hydrateContext(baseParams({
+    latest_checkpoint: latestCheckpoint,
+    mandatory,
+  }));
+
+  assert.deepStrictEqual(latestCheckpoint, checkpointBefore);
+  assert.deepStrictEqual(mandatory, mandatoryBefore);
+  assert.deepStrictEqual(checkpointRecord, recordBefore);
+  // Validation only — no injection, append, reorder, rewrite, or dedup.
+  assert.deepStrictEqual(result.context_package.mandatory, mandatoryBefore);
+  assert.strictEqual(result.context_package.mandatory.length, mandatory.length);
 });
 
 // ---------------------------------------------------------------------------

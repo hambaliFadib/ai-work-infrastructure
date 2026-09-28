@@ -21,6 +21,13 @@
  * that may persist omission metadata, so every pure fail-closed integration
  * gate must succeed before that final ContextPackage/store boundary.
  *
+ * Checkpoint invariant (validation only): when the Objective Parser resolved
+ * a declared latest checkpoint, the caller-supplied mandatory context must
+ * already contain that exact checkpoint identity (checkpoint_id). The
+ * hydrator never injects, synthesizes, or mutates mandatory records — an
+ * invalid integrated request fails closed before any provider, ranking, or
+ * omission-store boundary.
+ *
  * Integration layer only: no scoring, validation, dedup, budget, omission,
  * or skill-resolution logic is duplicated here. Every stage delegates to the
  * owning module's public API and preserves its native error class/code.
@@ -52,6 +59,33 @@ function isPlainRecord(value) {
 }
 
 /**
+ * Locked v1 checkpoint invariant at the integrated boundary (validation only).
+ *
+ * The Objective Parser already normalizes latest_checkpoint and exposes the
+ * authoritative identity as objective.provenance.checkpoint_id. When that
+ * identity is declared (non-empty string), the caller-supplied mandatory
+ * context must already contain a plain-object record whose checkpoint_id is
+ * strictly equal. The hydrator never synthesizes, appends, or mutates
+ * mandatory records — the caller/runtime remains responsible for assembling
+ * the actual checkpoint payload. A declared checkpoint that is not
+ * represented fails closed before skills, retrieval, ranking, or any
+ * omission-store boundary.
+ */
+function assertDeclaredCheckpointIsMandatory(objective, mandatory) {
+  const checkpointId = objective.provenance.checkpoint_id;
+  // No declared checkpoint (null / absent) — nothing to enforce.
+  if (typeof checkpointId !== 'string') return;
+  const represented =
+    Array.isArray(mandatory) &&
+    mandatory.some((record) => isPlainRecord(record) && record.checkpoint_id === checkpointId);
+  if (!represented) {
+    throw new TypeError(
+      'latest_checkpoint must be represented in mandatory context by matching checkpoint_id'
+    );
+  }
+}
+
+/**
  * Hydrate context through the complete deterministic v1 pipeline.
  *
  * @param {object} params
@@ -59,7 +93,8 @@ function isPlainRecord(value) {
  * @param {string} params.hydration_started_at - explicit immutable RFC3339 UTC run anchor
  * @param {string} params.session_id
  * @param {string} params.job_id
- * @param {string|object|null} [params.latest_checkpoint]
+ * @param {string|object|null} [params.latest_checkpoint] - when declared, caller-supplied
+ *   mandatory context must already contain a record with the same checkpoint_id
  * @param {string} params.user_request
  * @param {string[]} [params.active_constraints]
  * @param {object} [params.explicit_objective]
@@ -107,6 +142,13 @@ function hydrateContext(params) {
     active_constraints,
     explicit_objective,
   });
+
+  // Checkpoint invariant (validation only) — enforced after the Objective
+  // Parser resolves the authoritative checkpoint identity and before every
+  // fail-closed integration gate (skills, retrieval, ranking, package). A
+  // missing representation must cause zero provider invocations and zero
+  // omission-store writes.
+  assertDeclaredCheckpointIsMandatory(objective, mandatory);
 
   // Stage 2 — Skill chain resolution. Pure fail-closed companion gate that
   // must execute before buildContextPackage() so a skill failure can never
