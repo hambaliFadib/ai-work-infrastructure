@@ -125,9 +125,9 @@ if (process.argv.includes(WORKER_FLAG)) {
   process.exit(runFixtureWorker() ? 0 : 1);
 }
 
-// R01: registry contains exactly 7 known suites
-test('R01 registry contains exactly 7 known suites', () => {
-  assert.strictEqual(SUITE_REGISTRY.length, 7, `Expected 7 suites, got ${SUITE_REGISTRY.length}`);
+// R01: registry contains exactly 8 known suites
+test('R01 registry contains exactly 8 known suites', () => {
+  assert.strictEqual(SUITE_REGISTRY.length, 8, `Expected 8 suites, got ${SUITE_REGISTRY.length}`);
 });
 
 // R02: contract.test.js is required
@@ -336,6 +336,14 @@ testAsync('R14 fixture state lives under the Git-ignored tmp root', () => {
   const ignoreContent = fs.readFileSync(path.join(repoRoot, '.gitignore'), 'utf8');
   const activeRules = ignoreContent.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
   assert.ok(activeRules.includes(`${FIXTURE_SUBDIR}/`), `repository .gitignore must contain an active ${FIXTURE_SUBDIR}/ rule`);
+});
+
+// R15: integration.test.js is registered and required
+testAsync('R15 integration.test.js is registered and required', () => {
+  const integration = SUITE_REGISTRY.find(s => s.name === 'integration');
+  assert.ok(integration, 'integration suite must exist');
+  assert.strictEqual(integration.required, true, 'integration must be required');
+  assert.strictEqual(integration.file, 'integration.test.js');
 });
 
 async function main() {

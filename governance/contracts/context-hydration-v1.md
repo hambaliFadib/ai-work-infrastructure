@@ -1,7 +1,7 @@
 # Context Hydration v1 — Governance Contract
 
 **Status:** CONTRACT LOCKED
-**Implementation:** COMPONENTS IMPLEMENTED — INTEGRATION PENDING (#14)
+**Implementation:** PIPELINE IMPLEMENTED — ACCEPTANCE PENDING (#15)
 **Policy:** context-hydration@1.0.1
 **Policy ID:** context-hydration
 **Policy Version:** 1.0.1
@@ -594,13 +594,13 @@ Guard errors are not chain decision outcomes. Machine policy: `skills.guard_erro
 ### 14.7 D7 — Implementation Status
 
 Status: CONTRACT LOCKED
-Implementation: COMPONENTS IMPLEMENTED — INTEGRATION PENDING (#14)
+Implementation: PIPELINE IMPLEMENTED — ACCEPTANCE PENDING (#15)
 
 - Objective Parser implemented
 - Ranking implemented
 - Retrieval/Eligibility implemented
 - Budget/ContextPackage implemented
 - Skill Resolver implemented
-- Component runner verified 7/7
-- Complete pipeline assembly still pending #14
+- hydrateContext integration orchestrator implemented (#14)
+- Component + integration runner verified 8/8
 - Acceptance 37/37 still pending #15
