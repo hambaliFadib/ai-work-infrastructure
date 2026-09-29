@@ -1,17 +1,18 @@
 # Job Isolation — Architecture Document
 
 Status: CONTRACT LOCKED
-Implementation: IMPLEMENTATION NOT STARTED
+RUNTIME IMPLEMENTATION: IN PROGRESS / PARTIAL
 Policy: job-isolation@1.0.0
 Phase: 9B
 Governance issue: #37 (9B-01)
 
-This document describes the CONCEPTUAL architecture of Job Isolation v1 as locked by
-`governance/contracts/job-isolation-v1.md`. It does not describe an implemented runtime API.
+This document describes the architecture of Job Isolation v1 as locked by
+`governance/contracts/job-isolation-v1.md`. The JobContract core and namespace derivation
+primitives are implemented runtime modules; remaining stages are conceptual.
 
 All flow descriptions below are:
 
-CONCEPTUAL / NOT IMPLEMENTED
+CONCEPTUAL / PARTIAL — see section 5
 
 ---
 
@@ -51,7 +52,7 @@ Job Isolation Boundary
 └── Operation-specific execution context/target
 ```
 
-CONCEPTUAL / NOT IMPLEMENTED
+CONCEPTUAL / PARTIAL — see section 5
 
 - The JobContract record is exactly 8 canonical fields; unknown fields fail closed.
 - Working context is a derived job-scoped view, not a JobContract field.
@@ -110,5 +111,17 @@ CONCEPTUAL / NOT IMPLEMENTED
 
 ## 5. Implementation Status
 
-CONTRACT LOCKED. IMPLEMENTATION NOT STARTED. No runtime module exists for Job Isolation v1.
-Acceptance executions are declared for 9B-06 (#42).
+CONTRACT LOCKED. RUNTIME IMPLEMENTATION: IN PROGRESS / PARTIAL.
+
+Implemented:
+- JobContract Runtime Core (runtime/job-isolation/job-contract.js, 9B-02 / #38)
+- deterministic namespace derivation primitives (runtime/job-isolation/namespace-derivation.js, 9B-02 / #38)
+
+Pending:
+- namespace isolation enforcement (9B-03 / #39)
+- merged ParallelLane semantics (9B-04 / #40)
+- main coordination integration (9B-05 / #41)
+- Phase 9B acceptance (9B-06 / #42)
+
+Isolation enforcement is NOT implemented. Parallel-lane semantics are NOT merged.
+Acceptance executions are declared for 9B-06 (#42) and are NOT VERIFIED.

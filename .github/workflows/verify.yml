@@ -90,10 +90,13 @@ jobs:
           grep -Eq 'Context Hydration.*VERIFIED' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq 'context-hydration@1.0.1' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq '37/37' docs/ARCHITECTURE-BLUEPRINT.md
-          grep -Eq 'Phase 9B.*TARGET' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Eq 'Phase 9B.*IN PROGRESS' docs/ARCHITECTURE-BLUEPRINT.md
+          if grep -Fq 'Phase 9B and Phase 9C remain TARGET' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale Phase 9B TARGET claim in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
           grep -Eq 'Phase 9C.*TARGET' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Eq 'Phase 9A.*VERIFIED' docs/BUILD-PLAN.md
-          grep -Eq 'Phase 9B.*TARGET' docs/BUILD-PLAN.md
+          grep -Fq '## In-progress work' docs/BUILD-PLAN.md
+          grep -Eq 'Phase 9B.*IN PROGRESS' docs/BUILD-PLAN.md
+          if grep -Eq 'Phase 9B.*TARGET' docs/BUILD-PLAN.md; then echo 'stale Phase 9B TARGET state in docs/BUILD-PLAN.md'; exit 1; fi
           grep -Eq 'Phase 9C.*TARGET' docs/BUILD-PLAN.md
           if grep -Eq 'Phase 9A.*TARGET' docs/BUILD-PLAN.md; then echo 'stale Phase 9A TARGET state in docs/BUILD-PLAN.md'; exit 1; fi
           grep -Fq 'Phase 9A is VERIFIED' docs/WORKFLOW.md
@@ -109,7 +112,10 @@ jobs:
           grep -Eq 'Phase 9A.*VERIFIED' README.md
           grep -Fq '37/37' README.md
           grep -Fq 'context-hydration@1.0.1' README.md
-          grep -Eq 'Phase 9B.*TARGET' README.md
+          grep -Eq 'Phase 9B.*IN PROGRESS' README.md
+          grep -Fq 'job-isolation@1.0.0' README.md
+          grep -Fq 'PARTIAL' README.md
+          if grep -Fq 'Phase 9B and Phase 9C remain TARGET' README.md; then echo 'stale Phase 9B TARGET claim in README.md'; exit 1; fi
           grep -Eq 'Phase 9C.*TARGET' README.md
           if grep -Fq 'Phase 9A is also TARGET' README.md; then echo 'stale Phase 9A TARGET claim in README.md'; exit 1; fi
           if grep -Fq 'no Phase 9 capability is claimed as implemented' README.md; then echo 'stale no-Phase-9 claim in README.md'; exit 1; fi
@@ -117,7 +123,11 @@ jobs:
           if grep -Fq 'commits and remotes are currently absent' README.md; then echo 'stale absent-remotes claim in README.md'; exit 1; fi
           if grep -Fq 'GitHub collaboration files belong to RCB-03 and are not created yet' README.md; then echo 'stale RCB-03 claim in README.md'; exit 1; fi
           grep -Eq 'Phase 9A.*VERIFIED' docs/MIGRATION-MANIFEST.md
-          grep -Eq 'Phase 9B.*TARGET' docs/MIGRATION-MANIFEST.md
+          grep -Eq 'Phase 9B.*IN PROGRESS' docs/MIGRATION-MANIFEST.md
+          grep -Fq 'job-isolation@1.0.0' docs/MIGRATION-MANIFEST.md
+          grep -Fq 'PARTIAL' docs/MIGRATION-MANIFEST.md
+          if grep -Fq 'Phase 9B Job Isolation + Parallelism is TARGET / PLANNED' docs/MIGRATION-MANIFEST.md; then echo 'stale Phase 9B TARGET / PLANNED claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
+          if grep -Fq 'Phase 9B and Phase 9C remain future target work' docs/MIGRATION-MANIFEST.md; then echo 'stale Phase 9B future-work claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
           grep -Eq 'Phase 9C.*TARGET' docs/MIGRATION-MANIFEST.md
           grep -Eq 'RCB-07.*VERIFIED' docs/MIGRATION-MANIFEST.md
           if grep -Fq 'RCB-03 through RCB-07 are PENDING' docs/MIGRATION-MANIFEST.md; then echo 'stale RCB pending claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
@@ -131,7 +141,12 @@ jobs:
           grep -Fq 'working context as a derived job-scoped view, not a JobContract field' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq 'operation-specific execution targets such as database targets' docs/ARCHITECTURE-BLUEPRINT.md
           if grep -Fq 'A unified JobContract does not yet exist' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale JobContract claim in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
+          grep -Fq 'Runtime implementation: IN PROGRESS / PARTIAL' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'PARTIAL' docs/ARCHITECTURE-BLUEPRINT.md
+          if grep -Fq 'Runtime implementation: NOT STARTED' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale runtime implementation status in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
           grep -Fq 'job-isolation@1.0.0' docs/WORKFLOW.md
           grep -Fq 'Governance contract: LOCKED' docs/WORKFLOW.md
-          grep -Fq 'Runtime implementation: NOT STARTED' docs/WORKFLOW.md
+          grep -Fq 'Runtime implementation: IN PROGRESS / PARTIAL' docs/WORKFLOW.md
+          grep -Fq 'PARTIAL' docs/WORKFLOW.md
+          if grep -Fq 'Runtime implementation: NOT STARTED' docs/WORKFLOW.md; then echo 'stale runtime implementation status in docs/WORKFLOW.md'; exit 1; fi
           if grep -Fq 'governance not yet locked' docs/WORKFLOW.md; then echo 'stale Phase 9B lock claim in docs/WORKFLOW.md'; exit 1; fi
