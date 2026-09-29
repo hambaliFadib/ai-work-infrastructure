@@ -27,6 +27,9 @@ const arch = read('docs/architecture/job-isolation.md');
 const collab = read('docs/governance/repository-collaboration.md');
 const blueprint = read('docs/ARCHITECTURE-BLUEPRINT.md');
 const workflow = read('docs/WORKFLOW.md');
+const readme = read('README.md');
+const migration = read('docs/MIGRATION-MANIFEST.md');
+const buildPlan = read('docs/BUILD-PLAN.md');
 const executionContext = read('governance/schemas/execution-context.json');
 
 let passed = 0;
@@ -368,6 +371,25 @@ test('JIC33', () => {
   assert.ok(/#42\s+9B-06 Acceptance Closure\s+— status:blocked/.test(collab));
   assert.ok(collab.includes('CONTRACT_LOCKED / PARTIAL'));
   assert.ok(collab.includes('IN PROGRESS / PARTIAL'));
+  assert.ok(readme.includes('Phase 9B'));
+  assert.ok(readme.includes('IN PROGRESS'));
+  assert.ok(readme.includes('NOT VERIFIED'));
+  assert.ok(readme.includes('job-isolation@1.0.0'));
+  assert.ok(readme.includes('PARTIAL'));
+  assert.ok(!readme.includes('Phase 9B and Phase 9C remain TARGET'));
+  assert.ok(migration.includes('Phase 9B'));
+  assert.ok(migration.includes('IN PROGRESS'));
+  assert.ok(migration.includes('NOT VERIFIED'));
+  assert.ok(migration.includes('job-isolation@1.0.0'));
+  assert.ok(migration.includes('PARTIAL'));
+  assert.ok(!migration.includes('TARGET / PLANNED'));
+  assert.ok(!migration.includes('Phase 9B and Phase 9C remain future target work'));
+  assert.ok(buildPlan.includes('Phase 9B'));
+  assert.ok(buildPlan.includes('IN PROGRESS'));
+  assert.ok(buildPlan.includes('NOT VERIFIED'));
+  assert.ok(buildPlan.includes('PARTIAL'));
+  assert.ok(!/Phase 9B.*TARGET/.test(buildPlan));
+  assert.ok(workflow.includes('NOT VERIFIED'));
 });
 
 console.log('');

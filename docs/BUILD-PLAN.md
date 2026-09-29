@@ -29,15 +29,22 @@ RCB-06  VERIFIED
 RCB-07  VERIFIED
 ```
 
+## In-progress work
+
+```text
+Phase 9B  Job Isolation + Parallelism        IN PROGRESS / NOT VERIFIED
+          runtime PARTIAL
+```
+
 ## Target work
 
 ```text
-Phase 9B  Job Isolation + Parallelism        TARGET
 Phase 9C  Session Recovery                   TARGET
 ```
 
 Phase 9A is VERIFIED.
-Phase 9B and Phase 9C remain TARGET.
+Phase 9B is IN PROGRESS / NOT VERIFIED.
+Phase 9C remains TARGET.
 Architecture Freeze v1 remains blocked until 9A + 9B + 9C are all VERIFIED.
 Bootstrap, clean-clone verification, and public release follow the freeze and remain TARGET.
 
