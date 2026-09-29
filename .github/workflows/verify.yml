@@ -54,6 +54,8 @@ jobs:
         run: node runtime/mcp/servers/oracle/tests/mcp-binding.test.js
       - name: Context Hydration contract tests
         run: node runtime/tests/context-hydration/run-all.js
+      - name: Job Isolation contract tests
+        run: node runtime/tests/job-isolation/run-all.js
 
   security-scan:
     name: security-scan
@@ -122,3 +124,14 @@ jobs:
           if grep -Eq 'Phase 9A.*TARGET' docs/MIGRATION-MANIFEST.md; then echo 'stale Phase 9A TARGET state in docs/MIGRATION-MANIFEST.md'; exit 1; fi
           if grep -Fq 'No GitHub remote' docs/MIGRATION-MANIFEST.md; then echo 'stale no-remote claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
           if grep -Fq 'Phase 9 implementation is claimed' docs/MIGRATION-MANIFEST.md; then echo 'stale no-Phase-9-implementation claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
+          grep -Fq 'job-isolation@1.0.0' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'CONTRACT LOCKED' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'JobContract v1' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'exactly 8 canonical fields' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'working context as a derived job-scoped view, not a JobContract field' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'operation-specific execution targets such as database targets' docs/ARCHITECTURE-BLUEPRINT.md
+          if grep -Fq 'A unified JobContract does not yet exist' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale JobContract claim in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
+          grep -Fq 'job-isolation@1.0.0' docs/WORKFLOW.md
+          grep -Fq 'Governance contract: LOCKED' docs/WORKFLOW.md
+          grep -Fq 'Runtime implementation: NOT STARTED' docs/WORKFLOW.md
+          if grep -Fq 'governance not yet locked' docs/WORKFLOW.md; then echo 'stale Phase 9B lock claim in docs/WORKFLOW.md'; exit 1; fi

@@ -110,12 +110,14 @@ policy:     context-hydration@1.0.1
 #16  epic  — OPEN — PLANNED / NOT IMPLEMENTED
 children: 6
 
-#37  9B-01 Job Isolation Governance Contract  — status:ready
-#38  9B-02 JobContract Runtime Core           — blocked
-#39  9B-03 Namespace Isolation Enforcement    — blocked
-#40  9B-04 Parallel Lane Semantics            — blocked
-#41  9B-05 Main Coordination Integration      — blocked
-#42  9B-06 Acceptance Closure                 — blocked
+#37  9B-01 Job Isolation Governance Contract  — CLOSED / VERIFIED
+#38  9B-02 JobContract Runtime Core           — status:ready
+#39  9B-03 Namespace Isolation Enforcement    — status:blocked by #38
+#40  9B-04 Parallel Lane Semantics            — status:ready
+#41  9B-05 Main Coordination Integration      — status:blocked
+#42  9B-06 Acceptance Closure                 — status:blocked
+
+policy: job-isolation@1.0.0 — CONTRACT_LOCKED / NOT_IMPLEMENTED
 ```
 
 ### Phase 9C — Session Recovery

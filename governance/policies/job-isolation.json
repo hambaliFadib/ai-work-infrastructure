@@ -1,0 +1,237 @@
+{
+  "policy_id": "job-isolation",
+  "policy_version": "1.0.0",
+  "policy_ref": "job-isolation@1.0.0",
+  "status": "CONTRACT_LOCKED",
+  "implementation_status": "NOT_IMPLEMENTED",
+  "phase": "9B",
+  "description": "Normative governance contract for Job Isolation v1: JobContract, job identity, namespace isolation, parallel lanes, capability ceilings, canonical fail-closed errors, and the Phase 9B acceptance model. Governance only - no runtime implementation is claimed.",
+  "job_contract": {
+    "required_fields": ["job_id", "profile", "session_namespace", "knowledge_scope", "evidence_namespace", "ledger_namespace", "runtime_state_namespace", "execution_permissions"],
+    "unknown_fields": "FAIL_CLOSED",
+    "future_extension_requires_version_change": true
+  },
+  "job_boundary": {
+    "job_contract_field_count": 8,
+    "working_context": {
+      "job_contract_field": false,
+      "representation": "DERIVED_JOB_SCOPED_VIEW",
+      "authoritative_identity": "JOB_CONTRACT",
+      "cross_job_bleed": "FORBIDDEN"
+    },
+    "database_target": {
+      "job_contract_field": false,
+      "ownership": "OPERATION_SPECIFIC_EXECUTION_CONTEXT",
+      "isolation_identity": false,
+      "may_override_job_id": false,
+      "may_override_profile": false,
+      "may_elevate_permissions": false,
+      "credential_material_allowed": false,
+      "connection_strings_allowed": false
+    }
+  },
+  "job_id": {
+    "required": true,
+    "creation_authority": "MAIN_COORDINATION_AUTHORITY",
+    "creation_timing": "BEFORE_ANY_JOB_SCOPED_NAMESPACE_WRITE",
+    "normalization": ["unicode_nfkc", "trim", "lowercase"],
+    "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+    "min_length": 1,
+    "max_length": 64,
+    "creation": {
+      "caller_supplied": "ALLOWED_ONLY_DURING_CREATION",
+      "generated": "ONE_TIME_CREATION_MUST_PERSIST_BEFORE_REUSE",
+      "resolution_must_not_generate_new_identity": true
+    },
+    "collision": {
+      "create_collision_error": "JOB_ID_COLLISION",
+      "exact_persisted_reuse": "IDEMPOTENT",
+      "different_immutable_fields_error": "JOB_ID_COLLISION"
+    },
+    "forbidden_derivations": ["path_separators", "absolute_paths", "whitespace", "probabilistic_memory", "free_text_objective_only", "llm_generated_resolution_key", "wall_clock_dependent_identity"]
+  },
+  "profile": {
+    "required": true,
+    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+    "normalization": ["trim"],
+    "case_preserved": true,
+    "case_folded": false,
+    "allowed_sources": ["EXPLICIT_SELECTION", "EXPLICIT_AUDITED_DEFAULT"],
+    "silent_inheritance": "FORBIDDEN",
+    "must_resolve_before_activation": true,
+    "immutable_when_active": true,
+    "invalid_error": "PROFILE_BINDING_INVALID",
+    "mismatch_error": "PROFILE_BINDING_MISMATCH",
+    "secret_reads": "NOT_REQUIRED"
+  },
+  "namespaces": {
+    "kind": "LOGICAL_IDENTIFIER_NOT_FILESYSTEM_PATH",
+    "templates": {
+      "session": "job:{job_id}:sessions",
+      "evidence": "job:{job_id}:evidence",
+      "ledger": "job:{job_id}:ledger",
+      "runtime_state": "job:{job_id}:runtime-state",
+      "knowledge_job_local": "job:{job_id}:knowledge"
+    },
+    "session_specific_template": "job:{job_id}:sessions:{session_key}",
+    "derivation": {
+      "deterministic": true,
+      "pure": true,
+      "collision_safe": true,
+      "job_bound": true
+    },
+    "override": "FORBIDDEN",
+    "override_error": "NAMESPACE_OVERRIDE_FORBIDDEN",
+    "derivation_failure_error": "NAMESPACE_DERIVATION_FAILED",
+    "collision_error": "NAMESPACE_COLLISION",
+    "fallback": "NONE"
+  },
+  "knowledge_scope": {
+    "required": true,
+    "type": "ARRAY",
+    "enum": ["JOB_LOCAL", "SESSION_LOCAL", "GLOBAL"],
+    "canonical_order": ["JOB_LOCAL", "SESSION_LOCAL", "GLOBAL"],
+    "job_local_required": true,
+    "deduplicate": true,
+    "empty": "INVALID",
+    "unknown_error": "INVALID_KNOWLEDGE_SCOPE"
+  },
+  "knowledge_isolation": {
+    "job_local": {
+      "requires": "SAME_CANONICAL_JOB",
+      "foreign_job_error": "FOREIGN_JOB_REJECT"
+    },
+    "session_local": {
+      "requires": ["SAME_CANONICAL_JOB", "SAME_CANONICAL_SESSION"],
+      "session_equality_overrides_foreign_job": false
+    },
+    "global": {
+      "requires": ["GLOBAL_IN_JOB_CONTRACT_KNOWLEDGE_SCOPE", "SOURCE_EXPLICITLY_GLOBAL_OR_UNOWNED"],
+      "grants": "READ_ELIGIBILITY_ONLY",
+      "implicit_global_writes": "FORBIDDEN",
+      "global_permission_never_promotes_foreign_job_local_data": true
+    },
+    "context_hydration_policy_ref": "context-hydration@1.0.1",
+    "scoring_changes": "NONE"
+  },
+  "evidence_isolation": {
+    "invariant": "EVIDENCE_FOR_JOB_A_MUST_NOT_SATISFY_JOB_B",
+    "cross_job_access_error": "FOREIGN_JOB_REJECT",
+    "cross_job_write_error": "FOREIGN_NAMESPACE_WRITE_REJECTED",
+    "shared_global_evidence_namespace": "NOT_IN_V1"
+  },
+  "ledger_isolation": {
+    "owns": ["execution_records", "decisions", "audit_events", "coordination_entries"],
+    "shared_mutable_ledger": "FORBIDDEN",
+    "recovery_state_machine": "PHASE_9C_OUT_OF_SCOPE"
+  },
+  "runtime_state_isolation": {
+    "mutable": true,
+    "job_bound": true,
+    "foreign_read_write_error": "FOREIGN_NAMESPACE_WRITE_REJECTED",
+    "cleanup_ownership": "OWNING_JOB_NAMESPACE_ONLY",
+    "implicit_cross_job_coordination": "FORBIDDEN"
+  },
+  "execution_permissions": {
+    "required": true,
+    "type": "ARRAY",
+    "enum": ["READ_ONLY", "LOW_RISK_WRITE", "CONFIG_WRITE", "DELETE", "SECRET_ACCESS"],
+    "canonical_order": ["READ_ONLY", "LOW_RISK_WRITE", "CONFIG_WRITE", "DELETE", "SECRET_ACCESS"],
+    "read_only_required": true,
+    "deduplicate": true,
+    "empty": "INVALID",
+    "unknown_error": "INVALID_EXECUTION_PERMISSIONS",
+    "capability_ceiling_not_authorization": true,
+    "self_elevation": "FORBIDDEN",
+    "approval_system_authoritative": ["approval-gate", "safe-mode"]
+  },
+  "approval_mapping": {
+    "READ_ONLY": {
+      "action_class": "READ",
+      "contract_alone_authorizes_execution": false,
+      "release_gate": "PLAN_AND_EXPLICIT_USER_RELEASE"
+    },
+    "LOW_RISK_WRITE": {
+      "action_class": "WRITE",
+      "contract_alone_authorizes_execution": false,
+      "approval_required": true
+    },
+    "CONFIG_WRITE": {
+      "action_class": "WRITE",
+      "contract_alone_authorizes_execution": false,
+      "approval_required": true
+    },
+    "DELETE": {
+      "action_class": "WRITE_DESTRUCTIVE",
+      "contract_alone_authorizes_execution": false,
+      "requires_separate_explicit_governing_authority": true,
+      "otherwise": "FAIL_CLOSED"
+    },
+    "SECRET_ACCESS": {
+      "action_class": "PROTECTED_ACCESS",
+      "contract_alone_authorizes_execution": false,
+      "requires_separate_explicit_governing_authority": true,
+      "otherwise": "FAIL_CLOSED"
+    },
+    "bypass_forbidden": ["approval_gate", "safe_mode", "security_checks", "project_root_boundaries"]
+  },
+  "parallel_lane": {
+    "required_fields": ["lane_id", "job_id", "branch", "worktree", "writer_identity", "baseline_main_sha"],
+    "lane_id": {
+      "normalization": ["unicode_nfkc", "trim", "lowercase"],
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "collision_error": "LANE_ID_COLLISION",
+      "job_rebinding": "FORBIDDEN"
+    },
+    "one_active_writer_per_lane": true,
+    "ownership_conflict_error": "LANE_OWNERSHIP_CONFLICT",
+    "cross_lane_write_error": "CROSS_LANE_WRITE_REJECTED",
+    "immutable_fields": ["job_id", "branch", "worktree", "writer_identity", "baseline_main_sha"],
+    "baseline_main_sha": {
+      "required": true,
+      "pattern": "^[0-9a-f]{40}$",
+      "intentional_synchronization": "EXPLICIT_AND_AUDITED"
+    }
+  },
+  "coordination": {
+    "main_is": ["AUTHORITATIVE_MERGED_STATE", "INTEGRATION_BASELINE", "DEPENDENCY_COORDINATION_AUTHORITY", "MERGE_ELIGIBILITY_SOURCE", "POST_MERGE_VERIFICATION_BASELINE"],
+    "main_is_not": ["ONLY_EXECUTION_THREAD", "AGENT_MANAGER", "FORCED_DELEGATION_HIERARCHY"],
+    "coordination_checkout": "MAIN_ONLY",
+    "writer_branch_cannot_be_main": true,
+    "coordination_violation_error": "COORDINATION_CHECKOUT_VIOLATION",
+    "stale_baseline_error": "STALE_MAIN_BASELINE",
+    "stale_lane_is_authoritative_main": false,
+    "machine_neutral_examples": ["<coordination-checkout>", "<worktree-root>/<issue-id>"]
+  },
+  "conflict_detection": {
+    "detects": ["branch_divergence", "namespace_collision", "lane_ownership_collision", "job_identity_collision", "foreign_job_write_attempt"],
+    "recovery": "PHASE_9C_OUT_OF_SCOPE"
+  },
+  "canonical_errors": ["JOB_CONTRACT_INVALID", "INVALID_JOB_ID", "JOB_ID_COLLISION", "PROFILE_BINDING_INVALID", "PROFILE_BINDING_MISMATCH", "NAMESPACE_DERIVATION_FAILED", "NAMESPACE_OVERRIDE_FORBIDDEN", "NAMESPACE_COLLISION", "FOREIGN_JOB_REJECT", "FOREIGN_NAMESPACE_WRITE_REJECTED", "INVALID_KNOWLEDGE_SCOPE", "INVALID_EXECUTION_PERMISSIONS", "LANE_CONTRACT_INVALID", "LANE_ID_COLLISION", "LANE_OWNERSHIP_CONFLICT", "CROSS_LANE_WRITE_REJECTED", "COORDINATION_CHECKOUT_VIOLATION", "STALE_MAIN_BASELINE"],
+  "validation_precedence": ["STRUCTURAL_JOB_CONTRACT_VALIDITY", "CANONICAL_JOB_ID", "PROFILE_BINDING", "NAMESPACE_INTEGRITY", "KNOWLEDGE_SCOPE", "EXECUTION_PERMISSIONS", "JOB_IDENTITY_BOUNDARY", "LANE_STRUCTURAL_VALIDITY", "LANE_IDENTITY_OWNERSHIP", "COORDINATION_MAIN_BASELINE"],
+  "determinism": {
+    "identical_inputs_produce": ["IDENTICAL_JOB_CONTRACT_REPRESENTATION", "IDENTICAL_NAMESPACE_ROOTS", "IDENTICAL_KNOWLEDGE_SCOPE_ORDER", "IDENTICAL_EXECUTION_PERMISSION_ORDER", "IDENTICAL_LANE_IDENTITY_RESOLUTION", "IDENTICAL_VALIDATION_OUTCOME", "IDENTICAL_CANONICAL_ERROR_RESULT"],
+    "forbidden_identity_sources": ["wall_clock", "randomness_after_persisted_creation", "probabilistic_memory", "llm_output", "unordered_object_iteration", "machine_specific_path"]
+  },
+  "acceptance_model": {
+    "total": 40,
+    "JC": ["JC01", "JC02", "JC03", "JC04", "JC05", "JC06", "JC07", "JC08", "JC09", "JC10"],
+    "NS": ["NS01", "NS02", "NS03", "NS04", "NS05", "NS06", "NS07", "NS08", "NS09", "NS10"],
+    "PL": ["PL01", "PL02", "PL03", "PL04", "PL05", "PL06", "PL07", "PL08", "PL09", "PL10"],
+    "EP": ["EP01", "EP02", "EP03", "EP04", "EP05", "EP06", "EP07", "EP08", "EP09", "EP10"],
+    "note": "Declarations for 9B-06 (#42). Not runtime acceptance executions in 9B-01."
+  },
+  "phase_9c": {
+    "forbidden_states": ["NEW", "ACTIVE", "CHECKPOINTED", "BLOCKED", "INTERRUPTED", "FAILED", "CONFLICTED", "MERGE_PENDING", "RESOLVED", "ARCHIVED"],
+    "recovery_transitions": "OUT_OF_SCOPE"
+  },
+  "context_hydration": {
+    "policy_ref": "context-hydration@1.0.1",
+    "frozen": true,
+    "scoring_changes": "NONE"
+  },
+  "public_artifact_constraints": {
+    "forbidden_content": ["client_data", "pgn_data", "credentials", "secret_profiles", "runtime_auth_state", "private_personal_memory", "opencode_db", "browser_profiles", "machine_specific_evidence", "machine_specific_runtime_databases", "machine_specific_absolute_paths"],
+    "tracked_artifacts": "REUSABLE_INFRASTRUCTURE_ONLY"
+  }
+}

@@ -104,9 +104,19 @@ S01 one matching skill; S02 two compatible skills chain correctly; S03 three ski
 
 Total: 37 locked Phase 9A acceptance invariants. Acceptance result: 37/37 VERIFIED (O 10/10, H 17/17, S 10/10); runner 9/9.
 
-## Multi-job isolation and parallel semantics — TARGET — Phase 9B
+## Multi-job isolation and parallel semantics — Phase 9B
 
-The target JOB boundary contains profile, session namespace, working context, knowledge scope, evidence namespace, ledger namespace, runtime state, and database target. A unified JobContract does not yet exist.
+Governance contract: CONTRACT LOCKED — job-isolation@1.0.0
+
+Runtime implementation: NOT STARTED
+
+JobContract v1: exactly 8 canonical fields:
+job_id, profile, session_namespace, knowledge_scope, evidence_namespace, ledger_namespace, runtime_state_namespace, execution_permissions.
+
+The broader Job Isolation boundary also includes:
+
+- working context as a derived job-scoped view, not a JobContract field;
+- operation-specific execution targets such as database targets, outside the JobContract schema and unable to override job/profile/permissions or approval/security boundaries.
 
 ## Session recovery — TARGET — Phase 9C
 
