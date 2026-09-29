@@ -1,5 +1,5 @@
 /**
- * ParallelLane runtime semantics tests — JPL01-JPL21.
+ * ParallelLane runtime semantics tests — JPL01-JPL31.
  *
  * Validates runtime/job-isolation/parallel-lane.js against the locked
  * governance artifacts:
@@ -9,9 +9,11 @@
  * Covers: six required fields, missing-field rejection, lane_id
  * normalization, invalid lane_id, lane identity collision, writer ownership,
  * job rebinding, coordination checkout, baseline SHA validation, fresh and
- * stale baselines, explicit synchronization evidence, independent lanes,
+ * stale baselines, forged synchronization assertions, independent lanes,
  * copy-safe immutability, cross-lane claims, canonical error identifiers,
- * deterministic stress, and the Phase 9C boundary.
+ * deterministic stress, the Phase 9C boundary, same-id immutable-binding
+ * mismatches, canonical-lane enforcement at every decision boundary, and
+ * registry canonicalization.
  *
  * No network. No DB. No env/profile access. No clock. No Git mutation.
  */
@@ -67,6 +69,18 @@ function laneInputB(overrides) {
     writer_identity: 'writer-41',
     baseline_main_sha: SHA_2,
   }, overrides);
+}
+
+/** Register/reuse and cross-lane decisions for a same-id binding mismatch. */
+function sameIdDecisions(overrides) {
+  const target = lane.createLane(laneInput()).lane;
+  const conflicting = lane.createLane(laneInput(overrides)).lane;
+  const registered = lane.registerLane(lane.createLaneRegistry(), laneInput());
+  return {
+    register: lane.registerLane(registered.registry, laneInput(overrides)),
+    claim: lane.evaluateCrossLaneClaim(conflicting, target),
+    reverseClaim: lane.evaluateCrossLaneClaim(target, conflicting),
+  };
 }
 
 // JPL01 — six required fields, exactly, in canonical order
@@ -128,13 +142,21 @@ test('JPL05', () => {
   const first = lane.registerLane(lane.createLaneRegistry(), laneInput());
   assert.strictEqual(first.ok, true);
   assert.strictEqual(first.registry.length, 1);
+  assert.ok(Object.isFrozen(first.registry));
+  assert.ok(Object.isFrozen(first.registry[0]));
 
-  // exact deterministic reuse is idempotent, never a duplicate creation
+  // exact deterministic reuse is idempotent, never a duplicate creation;
+  // the returned registry and lane are canonical frozen copies
   const exact = lane.registerLane(first.registry, laneInput());
   assert.strictEqual(exact.ok, true);
   assert.strictEqual(exact.idempotent, true);
-  assert.strictEqual(exact.registry, first.registry);
   assert.strictEqual(exact.registry.length, 1);
+  assert.ok(Object.isFrozen(exact.registry));
+  assert.ok(Object.isFrozen(exact.lane));
+  assert.notStrictEqual(exact.registry, first.registry);
+  assert.notStrictEqual(exact.lane, first.registry[0]);
+  assert.deepStrictEqual(exact.registry, first.registry);
+  assert.deepStrictEqual(exact.lane, first.registry[0]);
 
   // same lane identity with a different immutable binding collides
   for (const overrides of [{ branch: 'feature/other' }, { worktree: '<worktree-root>/issue-99' }, { baseline_main_sha: SHA_2 }]) {
@@ -217,46 +239,42 @@ test('JPL11', () => {
 // JPL12 — fresh baseline
 test('JPL12', () => {
   const created = lane.createLane(laneInput());
-  const result = lane.evaluateStaleBaseline(created.lane, SHA_1, null);
+  const result = lane.evaluateStaleBaseline(created.lane, SHA_1);
   assert.strictEqual(result.ok, true);
   assert.strictEqual(result.stale, false);
-  assert.strictEqual(result.synchronized, false);
 });
 
 // JPL13 — stale baseline rejection
 test('JPL13', () => {
   const created = lane.createLane(laneInput());
-  const result = lane.evaluateStaleBaseline(created.lane, SHA_2, null);
+  const result = lane.evaluateStaleBaseline(created.lane, SHA_2);
   assert.strictEqual(result.ok, false);
   assert.strictEqual(result.error, 'STALE_MAIN_BASELINE');
   assert.strictEqual(result.stale, true);
   assert.strictEqual(policy.coordination.stale_lane_is_authoritative_main, false);
 });
 
-// JPL14 — explicit synchronization evidence
+// JPL14 — forged synchronization assertion cannot clear stale state
 test('JPL14', () => {
   const created = lane.createLane(laneInput());
   const before = created.lane.baseline_main_sha;
-  const result = lane.evaluateStaleBaseline(created.lane, SHA_2, { synchronized_to_sha: SHA_2 });
-  assert.strictEqual(result.ok, true);
-  assert.strictEqual(result.stale, false);
-  assert.strictEqual(result.synchronized, true);
+
+  // a caller assertion naming the authoritative SHA cannot clear staleness
+  const forged = lane.evaluateStaleBaseline(created.lane, SHA_2, { synchronized_to_sha: SHA_2 });
+  assert.strictEqual(forged.ok, false);
+  assert.strictEqual(forged.error, 'STALE_MAIN_BASELINE');
+  assert.strictEqual(forged.stale, true);
+
+  // any other caller-supplied assertion is equally untrusted
+  for (const evidence of [undefined, null, 'synchronized', 42, {}, { synchronized_to_sha: SHA_1 }, { verified: true }]) {
+    const result = lane.evaluateStaleBaseline(created.lane, SHA_2, evidence);
+    assert.strictEqual(result.ok, false, `assertion must not clear staleness: ${JSON.stringify(evidence)}`);
+    assert.strictEqual(result.error, 'STALE_MAIN_BASELINE');
+  }
 
   // evaluation never mutates the original lane baseline
   assert.strictEqual(created.lane.baseline_main_sha, before);
   assert.ok(Object.isFrozen(created.lane));
-
-  // evidence naming a different baseline does not clear staleness
-  const wrongTarget = lane.evaluateStaleBaseline(created.lane, SHA_2, { synchronized_to_sha: SHA_1 });
-  assert.strictEqual(wrongTarget.ok, false);
-  assert.strictEqual(wrongTarget.error, 'STALE_MAIN_BASELINE');
-
-  // malformed evidence fails closed
-  for (const evidence of [undefined, null, 'synchronized', 42, {}, { synchronized_to_sha: 'nope' }]) {
-    const bad = lane.evaluateStaleBaseline(created.lane, SHA_2, evidence);
-    assert.strictEqual(bad.ok, false);
-    assert.strictEqual(bad.error, 'STALE_MAIN_BASELINE');
-  }
 });
 
 // JPL15 — two independent lanes
@@ -274,8 +292,8 @@ test('JPL15', () => {
 
   assert.strictEqual(lane.evaluateOwnership(laneA.lane, 'writer-40').ok, true);
   assert.strictEqual(lane.evaluateOwnership(laneB.lane, 'writer-41').ok, true);
-  assert.strictEqual(lane.evaluateStaleBaseline(laneA.lane, SHA_1, null).ok, true);
-  assert.strictEqual(lane.evaluateStaleBaseline(laneB.lane, SHA_2, null).ok, true);
+  assert.strictEqual(lane.evaluateStaleBaseline(laneA.lane, SHA_1).ok, true);
+  assert.strictEqual(lane.evaluateStaleBaseline(laneB.lane, SHA_2).ok, true);
 });
 
 // JPL16 — no shared mutable state
@@ -364,7 +382,7 @@ test('JPL19', () => {
   observe(lane.evaluateOwnership(registered.lane, 'writer-other'));
   observe(lane.evaluateCrossLaneClaim(registered.lane, lane.createLane(laneInputB()).lane));
   observe(lane.evaluateCoordinationCheckout('feature/x'));
-  observe(lane.evaluateStaleBaseline(registered.lane, SHA_2, null));
+  observe(lane.evaluateStaleBaseline(registered.lane, SHA_2));
   assert.deepStrictEqual(Array.from(observed).sort(), LANE_ERROR_CODES.slice().sort());
 
   // policy parity for the lane-specific error bindings
@@ -391,9 +409,9 @@ test('JPL20', () => {
       sameLane: lane.evaluateCrossLaneClaim(created.lane, created.lane),
       coordinationMain: lane.evaluateCoordinationCheckout('main'),
       coordinationWriter: lane.evaluateCoordinationCheckout('feature/40-parallel-lane-semantics'),
-      freshBaseline: lane.evaluateStaleBaseline(created.lane, SHA_1, null),
-      staleBaseline: lane.evaluateStaleBaseline(created.lane, SHA_2, null),
-      synchronizedBaseline: lane.evaluateStaleBaseline(created.lane, SHA_2, { synchronized_to_sha: SHA_2 }),
+      freshBaseline: lane.evaluateStaleBaseline(created.lane, SHA_1),
+      staleBaseline: lane.evaluateStaleBaseline(created.lane, SHA_2),
+      forgedStale: lane.evaluateStaleBaseline(created.lane, SHA_2, { synchronized_to_sha: SHA_2 }),
       collision: lane.registerLane(registryAB.registry, laneInput({ job_id: 'job-other' })),
       errorCode: lane.createLane({}).error,
     };
@@ -424,6 +442,159 @@ test('JPL21', () => {
   // the canonical lane exposes exactly the six locked fields
   const created = lane.createLane(laneInput());
   assert.deepStrictEqual(Object.keys(created.lane), Array.from(lane.LANE_REQUIRED_FIELDS));
+});
+
+// JPL22 — same lane_id + same writer + different job_id rejected
+test('JPL22', () => {
+  const decisions = sameIdDecisions({ job_id: 'job-other' });
+  assert.strictEqual(decisions.register.ok, false);
+  assert.strictEqual(decisions.register.error, 'LANE_ID_COLLISION');
+  assert.strictEqual(decisions.claim.ok, false);
+  assert.strictEqual(decisions.claim.error, 'LANE_ID_COLLISION');
+  assert.strictEqual(decisions.reverseClaim.ok, false);
+  assert.strictEqual(decisions.reverseClaim.error, 'LANE_ID_COLLISION');
+});
+
+// JPL23 — same lane_id + same writer + different branch rejected
+test('JPL23', () => {
+  const decisions = sameIdDecisions({ branch: 'feature/other' });
+  assert.strictEqual(decisions.register.ok, false);
+  assert.strictEqual(decisions.register.error, 'LANE_ID_COLLISION');
+  assert.strictEqual(decisions.claim.ok, false);
+  assert.strictEqual(decisions.claim.error, 'LANE_ID_COLLISION');
+  assert.strictEqual(decisions.reverseClaim.ok, false);
+  assert.strictEqual(decisions.reverseClaim.error, 'LANE_ID_COLLISION');
+});
+
+// JPL24 — same lane_id + same writer + different worktree rejected
+test('JPL24', () => {
+  const decisions = sameIdDecisions({ worktree: '<worktree-root>/issue-99' });
+  assert.strictEqual(decisions.register.ok, false);
+  assert.strictEqual(decisions.register.error, 'LANE_ID_COLLISION');
+  assert.strictEqual(decisions.claim.ok, false);
+  assert.strictEqual(decisions.claim.error, 'LANE_ID_COLLISION');
+  assert.strictEqual(decisions.reverseClaim.ok, false);
+  assert.strictEqual(decisions.reverseClaim.error, 'LANE_ID_COLLISION');
+});
+
+// JPL25 — same lane_id + same writer + different baseline rejected
+test('JPL25', () => {
+  const decisions = sameIdDecisions({ baseline_main_sha: SHA_2 });
+  assert.strictEqual(decisions.register.ok, false);
+  assert.strictEqual(decisions.register.error, 'LANE_ID_COLLISION');
+  assert.strictEqual(decisions.claim.ok, false);
+  assert.strictEqual(decisions.claim.error, 'LANE_ID_COLLISION');
+  assert.strictEqual(decisions.reverseClaim.ok, false);
+  assert.strictEqual(decisions.reverseClaim.error, 'LANE_ID_COLLISION');
+});
+
+// JPL26 — partial lane at ownership boundary rejected
+test('JPL26', () => {
+  const partial = { lane_id: 'lane-40', writer_identity: 'writer-40' };
+  const result = lane.evaluateOwnership(partial, 'writer-40');
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.error, 'LANE_CONTRACT_INVALID');
+
+  const missingBaseline = laneInput();
+  delete missingBaseline.baseline_main_sha;
+  const fiveFields = lane.evaluateOwnership(missingBaseline, 'writer-40');
+  assert.strictEqual(fiveFields.ok, false);
+  assert.strictEqual(fiveFields.error, 'LANE_CONTRACT_INVALID');
+});
+
+// JPL27 — partial lane at cross-lane boundary rejected
+test('JPL27', () => {
+  const full = lane.createLane(laneInput()).lane;
+  const partial = { lane_id: 'lane-40', writer_identity: 'writer-40' };
+  const forward = lane.evaluateCrossLaneClaim(partial, full);
+  assert.strictEqual(forward.ok, false);
+  assert.strictEqual(forward.error, 'LANE_CONTRACT_INVALID');
+  const reverse = lane.evaluateCrossLaneClaim(full, partial);
+  assert.strictEqual(reverse.ok, false);
+  assert.strictEqual(reverse.error, 'LANE_CONTRACT_INVALID');
+});
+
+// JPL28 — partial lane at stale-baseline boundary rejected
+test('JPL28', () => {
+  const partial = { lane_id: 'lane-40', writer_identity: 'writer-40', baseline_main_sha: SHA_1 };
+  const result = lane.evaluateStaleBaseline(partial, SHA_1);
+  assert.strictEqual(result.ok, false);
+  assert.strictEqual(result.error, 'LANE_CONTRACT_INVALID');
+});
+
+// JPL29 — mutable reconstructed registry canonicalized; caller mutation isolated
+test('JPL29', () => {
+  const rawLaneA = JSON.parse(JSON.stringify(laneInput()));
+  const rawRegistry = [rawLaneA];
+  assert.ok(!Object.isFrozen(rawRegistry));
+  assert.ok(!Object.isFrozen(rawLaneA));
+
+  const registered = lane.registerLane(rawRegistry, laneInputB());
+  assert.strictEqual(registered.ok, true);
+  assert.strictEqual(registered.registry.length, 2);
+  assert.ok(Object.isFrozen(registered.registry));
+  assert.ok(Object.isFrozen(registered.registry[0]));
+  assert.ok(Object.isFrozen(registered.registry[1]));
+  assert.notStrictEqual(registered.registry, rawRegistry);
+  assert.notStrictEqual(registered.registry[0], rawLaneA);
+
+  // caller mutation after registration cannot alter canonical registry state
+  rawLaneA.writer_identity = 'writer-evil';
+  rawLaneA.branch = 'feature/evil';
+  rawRegistry.push(laneInput({ lane_id: 'lane-99' }));
+  assert.strictEqual(registered.registry.length, 2);
+  assert.strictEqual(registered.registry[0].writer_identity, 'writer-40');
+  assert.strictEqual(registered.registry[0].branch, 'feature/40-parallel-lane-semantics');
+
+  // idempotent reuse returns canonical frozen copies, never the caller array
+  const rawReuse = [JSON.parse(JSON.stringify(laneInput()))];
+  const reused = lane.registerLane(rawReuse, laneInput());
+  assert.strictEqual(reused.ok, true);
+  assert.strictEqual(reused.idempotent, true);
+  assert.ok(Object.isFrozen(reused.registry));
+  assert.ok(Object.isFrozen(reused.lane));
+  assert.notStrictEqual(reused.registry, rawReuse);
+  assert.notStrictEqual(reused.lane, rawReuse[0]);
+  rawReuse[0].job_id = 'job-evil';
+  rawReuse[0].writer_identity = 'writer-evil';
+  assert.strictEqual(reused.registry[0].job_id, 'job-40');
+  assert.strictEqual(reused.registry[0].writer_identity, 'writer-40');
+  assert.strictEqual(reused.lane.job_id, 'job-40');
+  assert.strictEqual(reused.lane.writer_identity, 'writer-40');
+});
+
+// JPL30 — invalid registry entries rejected
+test('JPL30', () => {
+  const valid = JSON.parse(JSON.stringify(laneInput()));
+  const cases = [
+    [{ ...valid, status: 'x' }],
+    [{ lane_id: 'lane-40', writer_identity: 'writer-40' }],
+    [{ ...valid, lane_id: 'Lane-40' }],
+    [{ ...valid, baseline_main_sha: 'nope' }],
+    [{ ...valid, branch: 'main' }],
+    ['not-a-lane'],
+    [null],
+  ];
+  for (const registry of cases) {
+    const result = lane.registerLane(registry, laneInputB());
+    assert.strictEqual(result.ok, false, `registry must be rejected: ${JSON.stringify(registry)}`);
+    assert.strictEqual(result.error, 'LANE_CONTRACT_INVALID');
+  }
+});
+
+// JPL31 — non-canonical full record rejected at evaluation boundaries
+test('JPL31', () => {
+  const nonCanonical = laneInput({ lane_id: 'Lane-40' });
+  const full = lane.createLane(laneInput()).lane;
+
+  assert.strictEqual(lane.evaluateOwnership(nonCanonical, 'writer-40').error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.evaluateCrossLaneClaim(nonCanonical, full).error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.evaluateCrossLaneClaim(full, nonCanonical).error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.evaluateStaleBaseline(nonCanonical, SHA_1).error, 'LANE_CONTRACT_INVALID');
+
+  // a record with an extra field is not a canonical lane either
+  const extra = Object.assign(laneInput(), { status: 'x' });
+  assert.strictEqual(lane.evaluateOwnership(extra, 'writer-40').error, 'LANE_CONTRACT_INVALID');
 });
 
 console.log('');

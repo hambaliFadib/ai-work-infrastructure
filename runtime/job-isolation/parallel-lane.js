@@ -4,7 +4,20 @@
  * Implements ONLY the locked ParallelLane semantics from
  * governance/contracts/job-isolation-v1.md (sections 17-20):
  * structural validation, lane identity, lane ownership, cross-lane claims,
- * coordination checkout validation, and stale main baseline evaluation.
+ * coordination checkout validation, and stale main baseline detection.
+ *
+ * Trust boundaries (fail closed):
+ * - every evaluation boundary (ownership, cross-lane claim, stale baseline)
+ *   validates its inputs as FULL canonical six-field lane records; partial or
+ *   malformed records fail closed with LANE_CONTRACT_INVALID and never receive
+ *   a success decision;
+ * - registry inputs are validated entry-by-entry and canonicalized into frozen
+ *   copies; caller-owned mutable arrays or lane objects are never returned and
+ *   never become canonical registry state;
+ * - stale baseline DETECTION ONLY: equality decides freshness. No
+ *   caller-supplied synchronization assertion can clear staleness. Trusted,
+ *   audited synchronization recognition is deferred to the coordination
+ *   integration lane (9B-05 / #41) rather than trusting caller assertions.
  *
  * Properties:
  * - pure and deterministic: no wall clock, no randomness, no environment input;
@@ -17,6 +30,7 @@
  * Not implemented here (explicitly out of scope):
  * - JobContract core validation (9B-03 / #38);
  * - namespace derivation and namespace enforcement;
+ * - trusted/audited synchronization recognition (coordination integration lane);
  * - recovery/resume state transitions (Phase 9C);
  * - any approval-system behavior.
  */
@@ -71,6 +85,9 @@ function reject(error, extra) {
  * Canonicalize a raw lane_id: NFKC, trim, lowercase, then structural pattern.
  * Invalid structure fails closed with LANE_CONTRACT_INVALID.
  * Never generates an identifier (no wall clock, no randomness).
+ *
+ * This normalization applies to CREATION only. Evaluation of an already-created
+ * lane requires an already-canonical lane_id; see validateCanonicalLane.
  */
 function canonicalizeLaneId(raw) {
   if (typeof raw !== 'string') return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
@@ -145,6 +162,64 @@ function createLaneRegistry() {
   return Object.freeze([]);
 }
 
+/**
+ * Canonical lane validator for ALREADY-CREATED lane records.
+ *
+ * Requires a full canonical six-field record and NEVER silently normalizes:
+ * - exactly the six canonical fields (partial and extended records fail);
+ * - lane_id already canonical (NFKC/trim/lowercase stable) and pattern-valid;
+ * - job_id, branch, worktree, writer_identity non-empty strings;
+ * - baseline_main_sha matches ^[0-9a-f]{40}$;
+ * - branch is not the coordination branch (main).
+ *
+ * Any violation fails closed with LANE_CONTRACT_INVALID.
+ * On success returns a frozen canonical COPY of the record.
+ */
+function validateCanonicalLane(value) {
+  if (!isPlainObject(value)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+
+  const keys = Object.keys(value);
+  if (keys.length !== LANE_REQUIRED_FIELDS.length) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  for (const field of LANE_REQUIRED_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(value, field)) {
+      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+    }
+  }
+
+  if (typeof value.lane_id !== 'string') return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  const canonicalLaneId = value.lane_id.normalize('NFKC').trim().toLowerCase();
+  if (value.lane_id !== canonicalLaneId || !LANE_ID_PATTERN.test(value.lane_id)) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+
+  for (const field of ['job_id', 'branch', 'worktree', 'writer_identity']) {
+    if (typeof value[field] !== 'string' || value[field].length === 0) {
+      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+    }
+  }
+
+  if (typeof value.baseline_main_sha !== 'string' || !MAIN_SHA_PATTERN.test(value.baseline_main_sha)) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+
+  if (value.branch === COORDINATION_BRANCH) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+
+  return pass({
+    lane: Object.freeze({
+      lane_id: value.lane_id,
+      job_id: value.job_id,
+      branch: value.branch,
+      worktree: value.worktree,
+      writer_identity: value.writer_identity,
+      baseline_main_sha: value.baseline_main_sha,
+    }),
+  });
+}
+
 /** Deterministic lookup by canonical lane_id. Returns the lane or null. */
 function findLane(registry, laneId) {
   if (!Array.isArray(registry) || typeof laneId !== 'string') return null;
@@ -160,55 +235,87 @@ function lanesEqual(a, b) {
 }
 
 /**
- * Register a lane into a registry (pure; the input registry is never mutated).
- *
- * - new canonical lane_id: returns a new frozen registry with the lane appended;
- * - exact same canonical lane: deterministic reuse, idempotent, no duplicate;
- * - same lane_id with a different job_id (job rebinding): LANE_ID_COLLISION;
- * - same lane_id with a different writer_identity: LANE_OWNERSHIP_CONFLICT;
- * - same lane_id with any other different immutable binding: LANE_ID_COLLISION.
+ * Decision for two full canonical lanes sharing the same lane_id but not being
+ * equal across all six fields. Deterministic precedence:
+ * - different job_id (job rebinding): LANE_ID_COLLISION;
+ * - different writer_identity: LANE_OWNERSHIP_CONFLICT;
+ * - any other immutable binding difference: LANE_ID_COLLISION.
  */
-function registerLane(registry, input) {
-  if (!Array.isArray(registry)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-
-  const created = createLane(input);
-  if (!created.ok) return created;
-  const lane = created.lane;
-
-  const existing = findLane(registry, lane.lane_id);
-  if (existing === null) {
-    return pass({ registry: Object.freeze(registry.concat([lane])), lane });
-  }
-  if (lanesEqual(existing, lane)) {
-    return pass({ registry, lane: existing, idempotent: true });
-  }
-  if (existing.job_id !== lane.job_id) {
-    return reject(LANE_ERRORS.LANE_ID_COLLISION);
-  }
-  if (existing.writer_identity !== lane.writer_identity) {
+function decideSameLaneId(existing, candidate) {
+  if (existing.job_id !== candidate.job_id) return reject(LANE_ERRORS.LANE_ID_COLLISION);
+  if (existing.writer_identity !== candidate.writer_identity) {
     return reject(LANE_ERRORS.LANE_OWNERSHIP_CONFLICT);
   }
   return reject(LANE_ERRORS.LANE_ID_COLLISION);
 }
 
 /**
+ * Canonicalize a registry supplied from persistence/caller:
+ * - must be an array;
+ * - every entry must be a full canonical six-field lane record (no
+ *   normalization is applied to persisted records);
+ * - each accepted record is copied and frozen;
+ * - the resulting registry is frozen.
+ * Any malformed or noncanonical entry: LANE_CONTRACT_INVALID.
+ */
+function canonicalizeRegistry(registry) {
+  if (!Array.isArray(registry)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  const lanes = [];
+  for (const entry of registry) {
+    const validated = validateCanonicalLane(entry);
+    if (!validated.ok) return validated;
+    lanes.push(validated.lane);
+  }
+  return pass({ registry: Object.freeze(lanes) });
+}
+
+/**
+ * Register a lane into a registry (pure; neither input is ever mutated or
+ * returned by reference).
+ *
+ * The registry is canonicalized first: caller-owned arrays and lane objects are
+ * validated, copied, and frozen. Outcomes:
+ * - new canonical lane_id: new frozen registry with the lane appended;
+ * - exact same canonical six-field lane: deterministic reuse, idempotent,
+ *   returning canonical frozen registry and lane copies (never caller refs);
+ * - same lane_id with a different job_id (job rebinding): LANE_ID_COLLISION;
+ * - same lane_id with a different writer_identity: LANE_OWNERSHIP_CONFLICT;
+ * - same lane_id with any other different immutable binding: LANE_ID_COLLISION.
+ */
+function registerLane(registry, input) {
+  const canonicalized = canonicalizeRegistry(registry);
+  if (!canonicalized.ok) return canonicalized;
+  const canonicalRegistry = canonicalized.registry;
+
+  const created = createLane(input);
+  if (!created.ok) return created;
+  const lane = created.lane;
+
+  const existing = findLane(canonicalRegistry, lane.lane_id);
+  if (existing === null) {
+    return pass({ registry: Object.freeze(canonicalRegistry.concat([lane])), lane });
+  }
+  if (lanesEqual(existing, lane)) {
+    return pass({ registry: canonicalRegistry, lane: existing, idempotent: true });
+  }
+  return decideSameLaneId(existing, lane);
+}
+
+/**
  * Lane ownership: one active writer per lane.
+ * Requires a full canonical lane record; partial/malformed records fail closed
+ * with LANE_CONTRACT_INVALID before any ownership decision is made.
  * Same lane + same writer is valid; a different writer fails closed with
  * LANE_OWNERSHIP_CONFLICT. Never mutates lane ownership data.
  */
 function evaluateOwnership(lane, writerIdentity) {
-  if (!isPlainObject(lane)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-  if (typeof lane.lane_id !== 'string' || lane.lane_id.length === 0) {
-    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-  }
-  if (typeof lane.writer_identity !== 'string' || lane.writer_identity.length === 0) {
-    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-  }
+  const validated = validateCanonicalLane(lane);
+  if (!validated.ok) return validated;
   if (typeof writerIdentity !== 'string' || writerIdentity.length === 0) {
     return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
   }
-  if (lane.writer_identity === writerIdentity) {
-    return pass({ lane_id: lane.lane_id, writer_identity: writerIdentity });
+  if (validated.lane.writer_identity === writerIdentity) {
+    return pass({ lane_id: validated.lane.lane_id, writer_identity: writerIdentity });
   }
   return reject(LANE_ERRORS.LANE_OWNERSHIP_CONFLICT);
 }
@@ -217,27 +324,25 @@ function evaluateOwnership(lane, writerIdentity) {
  * Cross-lane claim: a writer belonging to one lane must not claim or write
  * another lane as that other lane's writer.
  *
- * - same canonical lane identity: allowed for the owning writer; a different
- *   writer on the same lane identity remains LANE_OWNERSHIP_CONFLICT;
+ * Both records must be full canonical lanes (partial/malformed input fails
+ * closed with LANE_CONTRACT_INVALID before any claim decision).
+ *
+ * - same lane_id and all six canonical fields equal: same lane, allowed;
+ * - same lane_id with different immutable bindings: LANE_ID_COLLISION or
+ *   LANE_OWNERSHIP_CONFLICT (see decideSameLaneId);
  * - different lane identities: CROSS_LANE_WRITE_REJECTED (detection only).
  */
 function evaluateCrossLaneClaim(claimantLane, targetLane) {
-  if (!isPlainObject(claimantLane) || !isPlainObject(targetLane)) {
-    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-  }
-  for (const lane of [claimantLane, targetLane]) {
-    if (typeof lane.lane_id !== 'string' || lane.lane_id.length === 0) {
-      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  const claimant = validateCanonicalLane(claimantLane);
+  if (!claimant.ok) return claimant;
+  const target = validateCanonicalLane(targetLane);
+  if (!target.ok) return target;
+
+  if (claimant.lane.lane_id === target.lane.lane_id) {
+    if (lanesEqual(claimant.lane, target.lane)) {
+      return pass({ lane_id: target.lane.lane_id });
     }
-    if (typeof lane.writer_identity !== 'string' || lane.writer_identity.length === 0) {
-      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-    }
-  }
-  if (claimantLane.lane_id === targetLane.lane_id) {
-    if (claimantLane.writer_identity === targetLane.writer_identity) {
-      return pass({ lane_id: targetLane.lane_id });
-    }
-    return reject(LANE_ERRORS.LANE_OWNERSHIP_CONFLICT);
+    return decideSameLaneId(claimant.lane, target.lane);
   }
   return reject(LANE_ERRORS.CROSS_LANE_WRITE_REJECTED);
 }
@@ -256,37 +361,27 @@ function evaluateCoordinationCheckout(branch) {
 }
 
 /**
- * Explicit synchronization evidence must reference the authoritative main
- * baseline the lane synchronized to. Anything else is not explicit evidence.
- */
-function isExplicitSyncEvidence(evidence, authoritativeMainSha) {
-  if (!isPlainObject(evidence)) return false;
-  const target = evidence.synchronized_to_sha;
-  return typeof target === 'string' && MAIN_SHA_PATTERN.test(target) && target === authoritativeMainSha;
-}
-
-/**
- * Stale main baseline evaluation (detection only; no automatic sync, no
- * recovery transition, and the original lane baseline is never mutated).
+ * Stale main baseline DETECTION ONLY (no automatic sync, no recovery
+ * transition, and the original lane baseline is never mutated).
+ *
+ * Requires a full canonical lane record; partial/malformed records fail closed
+ * with LANE_CONTRACT_INVALID.
  *
  * - lane baseline equals authoritative main: fresh;
- * - different and no explicit synchronization evidence: STALE_MAIN_BASELINE;
- * - different with explicit synchronization evidence naming the authoritative
- *   main baseline: may pass evaluation without mutating the lane baseline.
+ * - any mismatch: STALE_MAIN_BASELINE.
+ *
+ * No caller-supplied synchronization assertion clears staleness. Trusted,
+ * audited synchronization recognition belongs to the later coordination
+ * integration authority (9B-05 / #41).
  */
-function evaluateStaleBaseline(lane, authoritativeMainSha, intentionalSyncEvidence) {
-  if (!isPlainObject(lane)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-  if (typeof lane.baseline_main_sha !== 'string' || !MAIN_SHA_PATTERN.test(lane.baseline_main_sha)) {
-    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-  }
+function evaluateStaleBaseline(lane, authoritativeMainSha) {
+  const validated = validateCanonicalLane(lane);
+  if (!validated.ok) return validated;
   if (typeof authoritativeMainSha !== 'string' || !MAIN_SHA_PATTERN.test(authoritativeMainSha)) {
     return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
   }
-  if (lane.baseline_main_sha === authoritativeMainSha) {
-    return pass({ stale: false, synchronized: false });
-  }
-  if (isExplicitSyncEvidence(intentionalSyncEvidence, authoritativeMainSha)) {
-    return pass({ stale: false, synchronized: true });
+  if (validated.lane.baseline_main_sha === authoritativeMainSha) {
+    return pass({ stale: false });
   }
   return reject(LANE_ERRORS.STALE_MAIN_BASELINE, { stale: true });
 }
