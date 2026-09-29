@@ -108,7 +108,19 @@ Total: 37 locked Phase 9A acceptance invariants. Acceptance result: 37/37 VERIFI
 
 Governance contract: CONTRACT LOCKED — job-isolation@1.0.0
 
-Runtime implementation: NOT STARTED
+Runtime implementation: IN PROGRESS / PARTIAL
+
+Implemented:
+- JobContract Runtime Core
+- deterministic namespace derivation primitives
+
+Pending:
+- namespace isolation enforcement
+- merged ParallelLane semantics
+- main coordination integration
+- Phase 9B acceptance
+
+Phase 9B acceptance: NOT VERIFIED
 
 JobContract v1: exactly 8 canonical fields:
 job_id, profile, session_namespace, knowledge_scope, evidence_namespace, ledger_namespace, runtime_state_namespace, execution_permissions.

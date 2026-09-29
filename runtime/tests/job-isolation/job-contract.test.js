@@ -1,5 +1,5 @@
 /**
- * Job Isolation v1 — JobContract Runtime Core tests (JCC01-JCC32).
+ * Job Isolation v1 — JobContract Runtime Core tests (JCC01-JCC34).
  *
  * Validates the deterministic JobContract runtime semantics against the
  * locked governance artifacts:
@@ -522,6 +522,55 @@ test('JCC32', () => {
   assert.strictEqual(policyError.name, 'JobIsolationPolicyError');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(policyError, 'code'), false);
   assert.strictEqual(policyError.code, undefined);
+});
+
+// JCC33 — plain-data record closure: custom prototypes rejected, null prototype allowed
+test('JCC33', () => {
+  const { contract } = createdAndPersisted('jcc33.core');
+  class CustomContract {}
+  const customProtoContract = Object.assign(new CustomContract(), contract);
+  expectCode(() => validateJobContract(customProtoContract), 'JOB_CONTRACT_INVALID');
+  const prototypeOnlyObject = Object.assign(Object.create({}), contract);
+  expectCode(() => validateJobContract(prototypeOnlyObject), 'JOB_CONTRACT_INVALID');
+  class CustomInput {}
+  const customProtoInput = Object.assign(new CustomInput(), creationInput('jcc33'));
+  expectCode(() => createJobContract(customProtoInput, new Map()), 'JOB_CONTRACT_INVALID');
+  const nullProtoContract = Object.assign(Object.create(null), contract);
+  assert.deepStrictEqual(validateJobContract(nullProtoContract), contract);
+  const nullProtoInput = Object.assign(Object.create(null), creationInput('jcc33'));
+  assert.strictEqual(createJobContract(nullProtoInput, new Map()).job_id, 'jcc33');
+});
+
+// JCC34 — accessor-backed fields are rejected and never invoked
+test('JCC34', () => {
+  const { contract } = createdAndPersisted('jcc34.core');
+  let invocations = 0;
+  const accessorContract = {
+    get job_id() { invocations += 1; return 'jcc34.core'; },
+    profile: contract.profile,
+    session_namespace: contract.session_namespace,
+    knowledge_scope: contract.knowledge_scope,
+    evidence_namespace: contract.evidence_namespace,
+    ledger_namespace: contract.ledger_namespace,
+    runtime_state_namespace: contract.runtime_state_namespace,
+    execution_permissions: contract.execution_permissions,
+  };
+  expectCode(() => validateJobContract(accessorContract), 'JOB_CONTRACT_INVALID');
+  for (const field of ['profile', 'knowledge_scope', 'execution_permissions']) {
+    const record = {
+      ...contract,
+      get [field]() { invocations += 1; return contract[field]; },
+    };
+    expectCode(() => validateJobContract(record), 'JOB_CONTRACT_INVALID');
+  }
+  for (const field of ['job_id', 'profile', 'knowledge_scope', 'execution_permissions']) {
+    const input = {
+      ...creationInput('jcc34'),
+      get [field]() { invocations += 1; return creationInput('jcc34')[field]; },
+    };
+    expectCode(() => createJobContract(input, new Map()), 'JOB_CONTRACT_INVALID');
+  }
+  assert.strictEqual(invocations, 0, 'accessor functions must never be invoked during validation');
 });
 
 console.log('');

@@ -103,8 +103,30 @@ const EXECUTION_PERMISSIONS = (() => {
 
 const PROFILE_PATTERN = new RegExp(POLICY.profile.pattern);
 
-function isPlainObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+/**
+ * A canonical record is a plain data record: a non-array object whose
+ * prototype is Object.prototype or null. Class instances and any other
+ * custom prototype are rejected — they could smuggle behavior into
+ * structural validation.
+ */
+function isPlainDataRecord(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Reject accessor-backed own properties (get/set) without invoking them.
+ * Descriptor inspection never executes getter or setter functions, so no
+ * caller-controlled code runs while deciding whether a record is valid.
+ */
+function assertDataProperties(record, label) {
+  for (const key of Reflect.ownKeys(record)) {
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    if (descriptor === undefined || 'get' in descriptor || 'set' in descriptor) {
+      throw new JobIsolationError('JOB_CONTRACT_INVALID', `${label} must contain only data properties: ${String(key)}`);
+    }
+  }
 }
 
 function arraysEqual(a, b) {
@@ -224,8 +246,9 @@ function buildJobContract(fields) {
  * The four stored namespace fields are derived by the runtime; any caller
  * attempt to supply a derived namespace fails closed with
  * NAMESPACE_OVERRIDE_FORBIDDEN, and unknown unrelated input fails closed with
- * JOB_CONTRACT_INVALID. Schema closure is strict: every own key (enumerable,
- * non-enumerable, or symbol) is inspected.
+ * JOB_CONTRACT_INVALID. Schema closure is strict: the record must be a plain
+ * data record (Object.prototype or null prototype, no accessor properties)
+ * and every own key (enumerable, non-enumerable, or symbol) is inspected.
  *
  * CREATE is explicit: an existing active canonical job_id in the supplied
  * persisted set always collides (JOB_ID_COLLISION), even when the input is
@@ -238,8 +261,8 @@ function createJobContract(input, persistedContracts) {
   if (!(persistedContracts instanceof Map)) {
     throw new JobIsolationError('JOB_CONTRACT_INVALID', 'persistedContracts must be a Map keyed by canonical job_id');
   }
-  if (!isPlainObject(input)) {
-    throw new JobIsolationError('JOB_CONTRACT_INVALID', 'Creation input must be a plain object');
+  if (!isPlainDataRecord(input)) {
+    throw new JobIsolationError('JOB_CONTRACT_INVALID', 'Creation input must be a plain data record');
   }
   // Strict own-key closure: every own key — enumerable, non-enumerable, or
   // symbol — is inspected. Derived namespace fields are runtime-owned; any
@@ -250,6 +273,8 @@ function createJobContract(input, persistedContracts) {
       throw new JobIsolationError('NAMESPACE_OVERRIDE_FORBIDDEN', `Caller-supplied derived namespace: ${key}`);
     }
   }
+  // Accessor-backed fields are rejected before any value is read.
+  assertDataProperties(input, 'Creation input');
   // Unknown unrelated creation input (including symbol own keys) fails closed.
   for (const key of ownKeys) {
     if (typeof key !== 'string' || !CREATION_INPUT_FIELDS.includes(key)) {
@@ -289,10 +314,13 @@ function createJobContract(input, persistedContracts) {
 }
 
 /**
- * Validate a persisted JobContract. Schema closure is strict: the own keys
- * (Reflect.ownKeys — enumerable, non-enumerable, and symbol keys included)
- * must equal exactly the locked eight string fields; anything else fails
- * closed with JOB_CONTRACT_INVALID.
+ * Validate a persisted JobContract. Schema closure is strict: the record must
+ * be a plain data record (Object.prototype or null prototype, no accessor
+ * properties) and its own keys (Reflect.ownKeys — enumerable, non-enumerable,
+ * and symbol keys included) must equal exactly the locked eight string
+ * fields; anything else fails closed with JOB_CONTRACT_INVALID. Accessor
+ * properties are rejected by descriptor inspection before any value is read,
+ * so caller-controlled getters never execute during validation.
  *
  * The persisted identity must already be canonical (no silent repair), the
  * profile must be in canonical bound form, the four namespace fields must
@@ -305,8 +333,8 @@ function createJobContract(input, persistedContracts) {
  */
 function validateJobContract(contract) {
   // 1. structural JobContract validity — strict own-key schema closure
-  if (!isPlainObject(contract)) {
-    throw new JobIsolationError('JOB_CONTRACT_INVALID', 'JobContract must be a plain object');
+  if (!isPlainDataRecord(contract)) {
+    throw new JobIsolationError('JOB_CONTRACT_INVALID', 'JobContract must be a plain data record');
   }
   const ownKeys = Reflect.ownKeys(contract);
   for (const key of ownKeys) {
@@ -314,6 +342,8 @@ function validateJobContract(contract) {
       throw new JobIsolationError('JOB_CONTRACT_INVALID', 'JobContract must not contain symbol own properties');
     }
   }
+  // Accessor-backed fields are rejected before any value is read.
+  assertDataProperties(contract, 'JobContract');
   for (const key of ownKeys) {
     if (!REQUIRED_FIELDS.includes(key)) {
       throw new JobIsolationError('JOB_CONTRACT_INVALID', `Unknown JobContract field: ${key}`);

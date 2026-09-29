@@ -2,10 +2,27 @@
 
 Status: CONTRACT LOCKED
 Policy: job-isolation@1.0.0
-Implementation: NOT IMPLEMENTED — GOVERNANCE ONLY
+Implementation: PARTIAL
 Phase: 9B (Job Isolation + Parallel Semantics)
 Epic: #16
 Governance issue: #37 (9B-01)
+
+Implementation status by sub-issue:
+
+9B-02 JobContract Runtime Core:
+IMPLEMENTED / pending merge verification
+
+9B-03 Namespace Isolation:
+NOT IMPLEMENTED
+
+9B-04 Parallel Lane:
+NOT MERGED
+
+9B-05 Integration:
+NOT IMPLEMENTED
+
+9B-06 Acceptance:
+NOT VERIFIED
 
 This document is the normative human-readable contract for Job Isolation v1. It defines
 WHAT Phase 9B means. It does NOT implement the runtime that enforces it.
@@ -437,7 +454,8 @@ Total: 40.
 
 - Status: CONTRACT LOCKED
 - Policy: job-isolation@1.0.0
-- Implementation: NOT IMPLEMENTED — GOVERNANCE ONLY
-- Runtime modules: none. No `runtime/job-isolation/*` file exists.
-- Acceptance executions: none in 9B-01; declared for 9B-06 (#42).
+- Implementation: PARTIAL
+- Implemented runtime modules: `runtime/job-isolation/job-contract.js` (JobContract Runtime Core, 9B-02 / #38) and `runtime/job-isolation/namespace-derivation.js` (deterministic namespace derivation primitives, 9B-02 / #38).
+- Pending: namespace isolation enforcement (9B-03), parallel lane semantics (9B-04), main coordination integration (9B-05), Phase 9B acceptance (9B-06).
+- Acceptance executions: declared for 9B-06 (#42); NOT VERIFIED.
 - Architecture Freeze: NOT CLAIMED.

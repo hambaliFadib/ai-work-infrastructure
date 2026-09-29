@@ -131,7 +131,12 @@ jobs:
           grep -Fq 'working context as a derived job-scoped view, not a JobContract field' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq 'operation-specific execution targets such as database targets' docs/ARCHITECTURE-BLUEPRINT.md
           if grep -Fq 'A unified JobContract does not yet exist' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale JobContract claim in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
+          grep -Fq 'Runtime implementation: IN PROGRESS / PARTIAL' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'PARTIAL' docs/ARCHITECTURE-BLUEPRINT.md
+          if grep -Fq 'Runtime implementation: NOT STARTED' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale runtime implementation status in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
           grep -Fq 'job-isolation@1.0.0' docs/WORKFLOW.md
           grep -Fq 'Governance contract: LOCKED' docs/WORKFLOW.md
-          grep -Fq 'Runtime implementation: NOT STARTED' docs/WORKFLOW.md
+          grep -Fq 'Runtime implementation: IN PROGRESS / PARTIAL' docs/WORKFLOW.md
+          grep -Fq 'PARTIAL' docs/WORKFLOW.md
+          if grep -Fq 'Runtime implementation: NOT STARTED' docs/WORKFLOW.md; then echo 'stale runtime implementation status in docs/WORKFLOW.md'; exit 1; fi
           if grep -Fq 'governance not yet locked' docs/WORKFLOW.md; then echo 'stale Phase 9B lock claim in docs/WORKFLOW.md'; exit 1; fi
