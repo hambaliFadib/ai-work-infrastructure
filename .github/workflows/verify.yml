@@ -60,11 +60,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Test security scanner fail-closed semantics
+        shell: bash
+        run: bash .github/scripts/security-scan.test.sh
       - name: Check prohibited tracked patterns
         shell: bash
-        run: |
-          ! git grep -nE 'BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|D:\\AI-Work-Infra|D:\\Sandbox AI|C:\\Users\\' -- ':!runtime/mcp/servers/oracle/node_modules/**'
-          ! git ls-files | grep -E '(^|/)(\.env|.*\.pem|.*\.key|credentials|secrets)(/|$)'
+        run: bash .github/scripts/security-scan.sh
 
   docs-contract:
     name: docs-contract
