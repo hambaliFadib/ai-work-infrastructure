@@ -8,12 +8,14 @@
  *
  * Trust boundaries (fail closed):
  * - every evaluation boundary (ownership, cross-lane claim, stale baseline)
- *   validates its inputs as FULL canonical six-field lane records; partial or
- *   malformed records fail closed with LANE_CONTRACT_INVALID and never receive
- *   a success decision;
- * - registry inputs are validated entry-by-entry and canonicalized into frozen
- *   copies; caller-owned mutable arrays or lane objects are never returned and
- *   never become canonical registry state;
+ *   validates its inputs as FULL canonical six-field PLAIN DATA lane records;
+ *   partial, accessor-backed, symbol-keyed, hidden-keyed, or custom-prototype
+ *   records fail closed with LANE_CONTRACT_INVALID and never receive a success
+ *   decision;
+ * - registry inputs are validated entry-by-entry, must contain at most one
+ *   entry per canonical lane_id (duplicate identities fail closed), and are
+ *   canonicalized into frozen copies; caller-owned mutable arrays or lane
+ *   objects are never returned and never become canonical registry state;
  * - stale baseline DETECTION ONLY: equality decides freshness. No
  *   caller-supplied synchronization assertion can clear staleness. Trusted,
  *   audited synchronization recognition is deferred to the coordination
@@ -28,7 +30,7 @@
  * - all returned structures are frozen and copy-safe; inputs are never mutated.
  *
  * Not implemented here (explicitly out of scope):
- * - JobContract core validation (9B-03 / #38);
+ * - JobContract core validation (9B-02 JobContract Runtime Core / #38);
  * - namespace derivation and namespace enforcement;
  * - trusted/audited synchronization recognition (coordination integration lane);
  * - recovery/resume state transitions (Phase 9C);
@@ -64,13 +66,6 @@ const LANE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const MAIN_SHA_PATTERN = /^[0-9a-f]{40}$/;
 const COORDINATION_BRANCH = 'main';
 
-function isPlainObject(value) {
-  if (value === null || typeof value !== 'object') return false;
-  if (Array.isArray(value)) return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
-}
-
 /** Frozen success envelope. */
 function pass(values) {
   return Object.freeze(Object.assign({ ok: true }, values));
@@ -79,6 +74,48 @@ function pass(values) {
 /** Frozen fail-closed envelope carrying a canonical error identifier. */
 function reject(error, extra) {
   return Object.freeze(Object.assign({ ok: false, error }, extra));
+}
+
+/**
+ * Read the six canonical fields from an untrusted record.
+ *
+ * The record must be plain data:
+ * - a plain object (Object.prototype or null prototype) — custom class
+ *   prototypes are rejected;
+ * - exactly the six canonical own keys (Reflect.ownKeys): no unknown string
+ *   keys (enumerable or non-enumerable), no symbol keys;
+ * - every required field is an ordinary own DATA property; accessor-backed
+ *   fields are rejected before any getter could run;
+ * - no descriptor or prototype repair is attempted; violations fail closed.
+ *
+ * Returns { ok: true, fields } (fresh field map) or LANE_CONTRACT_INVALID.
+ */
+function readCanonicalFields(value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  const ownKeys = Reflect.ownKeys(value);
+  if (ownKeys.length !== LANE_REQUIRED_FIELDS.length) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  for (const key of ownKeys) {
+    if (typeof key !== 'string' || !LANE_REQUIRED_FIELDS.includes(key)) {
+      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+    }
+  }
+  const fields = {};
+  for (const field of LANE_REQUIRED_FIELDS) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, field);
+    if (descriptor === undefined || descriptor.get !== undefined || descriptor.set !== undefined) {
+      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+    }
+    fields[field] = descriptor.value;
+  }
+  return pass({ fields });
 }
 
 /**
@@ -115,43 +152,36 @@ function canonicalizeLaneId(raw) {
  * No Git mutation is performed.
  */
 function createLane(input) {
-  if (!isPlainObject(input)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  const record = readCanonicalFields(input);
+  if (!record.ok) return record;
+  const fields = record.fields;
 
-  for (const key of Object.keys(input)) {
-    if (!LANE_REQUIRED_FIELDS.includes(key)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-  }
-  for (const field of LANE_REQUIRED_FIELDS) {
-    if (!Object.prototype.hasOwnProperty.call(input, field)) {
-      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-    }
-  }
-
-  const laneId = canonicalizeLaneId(input.lane_id);
+  const laneId = canonicalizeLaneId(fields.lane_id);
   if (!laneId.ok) return laneId;
 
   for (const field of ['job_id', 'branch', 'worktree', 'writer_identity']) {
-    const value = input[field];
+    const value = fields[field];
     if (typeof value !== 'string' || value.length === 0) {
       return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
     }
   }
 
-  const baselineMainSha = input.baseline_main_sha;
+  const baselineMainSha = fields.baseline_main_sha;
   if (typeof baselineMainSha !== 'string' || !MAIN_SHA_PATTERN.test(baselineMainSha)) {
     return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
   }
 
-  if (input.branch === COORDINATION_BRANCH) {
+  if (fields.branch === COORDINATION_BRANCH) {
     return reject(LANE_ERRORS.COORDINATION_CHECKOUT_VIOLATION);
   }
 
   return pass({
     lane: Object.freeze({
       lane_id: laneId.lane_id,
-      job_id: input.job_id,
-      branch: input.branch,
-      worktree: input.worktree,
-      writer_identity: input.writer_identity,
+      job_id: fields.job_id,
+      branch: fields.branch,
+      worktree: fields.worktree,
+      writer_identity: fields.writer_identity,
       baseline_main_sha: baselineMainSha,
     }),
   });
@@ -176,46 +206,38 @@ function createLaneRegistry() {
  * On success returns a frozen canonical COPY of the record.
  */
 function validateCanonicalLane(value) {
-  if (!isPlainObject(value)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  const record = readCanonicalFields(value);
+  if (!record.ok) return record;
+  const fields = record.fields;
 
-  const keys = Object.keys(value);
-  if (keys.length !== LANE_REQUIRED_FIELDS.length) {
-    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-  }
-  for (const field of LANE_REQUIRED_FIELDS) {
-    if (!Object.prototype.hasOwnProperty.call(value, field)) {
-      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-    }
-  }
-
-  if (typeof value.lane_id !== 'string') return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
-  const canonicalLaneId = value.lane_id.normalize('NFKC').trim().toLowerCase();
-  if (value.lane_id !== canonicalLaneId || !LANE_ID_PATTERN.test(value.lane_id)) {
+  if (typeof fields.lane_id !== 'string') return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  const canonicalLaneId = fields.lane_id.normalize('NFKC').trim().toLowerCase();
+  if (fields.lane_id !== canonicalLaneId || !LANE_ID_PATTERN.test(fields.lane_id)) {
     return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
   }
 
   for (const field of ['job_id', 'branch', 'worktree', 'writer_identity']) {
-    if (typeof value[field] !== 'string' || value[field].length === 0) {
+    if (typeof fields[field] !== 'string' || fields[field].length === 0) {
       return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
     }
   }
 
-  if (typeof value.baseline_main_sha !== 'string' || !MAIN_SHA_PATTERN.test(value.baseline_main_sha)) {
+  if (typeof fields.baseline_main_sha !== 'string' || !MAIN_SHA_PATTERN.test(fields.baseline_main_sha)) {
     return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
   }
 
-  if (value.branch === COORDINATION_BRANCH) {
+  if (fields.branch === COORDINATION_BRANCH) {
     return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
   }
 
   return pass({
     lane: Object.freeze({
-      lane_id: value.lane_id,
-      job_id: value.job_id,
-      branch: value.branch,
-      worktree: value.worktree,
-      writer_identity: value.writer_identity,
-      baseline_main_sha: value.baseline_main_sha,
+      lane_id: fields.lane_id,
+      job_id: fields.job_id,
+      branch: fields.branch,
+      worktree: fields.worktree,
+      writer_identity: fields.writer_identity,
+      baseline_main_sha: fields.baseline_main_sha,
     }),
   });
 }
@@ -254,6 +276,10 @@ function decideSameLaneId(existing, candidate) {
  * - must be an array;
  * - every entry must be a full canonical six-field lane record (no
  *   normalization is applied to persisted records);
+ * - at most one entry per canonical lane_id: a duplicate lane_id fails closed
+ *   (different writer_identity -> LANE_OWNERSHIP_CONFLICT; otherwise, including
+ *   an exact duplicate -> LANE_ID_COLLISION); duplicates are never silently
+ *   deduplicated and never returned;
  * - each accepted record is copied and frozen;
  * - the resulting registry is frozen.
  * Any malformed or noncanonical entry: LANE_CONTRACT_INVALID.
@@ -261,10 +287,20 @@ function decideSameLaneId(existing, candidate) {
 function canonicalizeRegistry(registry) {
   if (!Array.isArray(registry)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
   const lanes = [];
+  const owners = new Map();
   for (const entry of registry) {
     const validated = validateCanonicalLane(entry);
     if (!validated.ok) return validated;
-    lanes.push(validated.lane);
+    const lane = validated.lane;
+    const existing = owners.get(lane.lane_id);
+    if (existing !== undefined) {
+      if (existing.writer_identity !== lane.writer_identity) {
+        return reject(LANE_ERRORS.LANE_OWNERSHIP_CONFLICT);
+      }
+      return reject(LANE_ERRORS.LANE_ID_COLLISION);
+    }
+    owners.set(lane.lane_id, lane);
+    lanes.push(lane);
   }
   return pass({ registry: Object.freeze(lanes) });
 }
@@ -392,7 +428,6 @@ module.exports = Object.freeze({
   canonicalizeLaneId,
   createLane,
   createLaneRegistry,
-  findLane,
   registerLane,
   evaluateOwnership,
   evaluateCrossLaneClaim,

@@ -1,5 +1,5 @@
 /**
- * ParallelLane runtime semantics tests — JPL01-JPL31.
+ * ParallelLane runtime semantics tests — JPL01-JPL35.
  *
  * Validates runtime/job-isolation/parallel-lane.js against the locked
  * governance artifacts:
@@ -12,8 +12,10 @@
  * stale baselines, forged synchronization assertions, independent lanes,
  * copy-safe immutability, cross-lane claims, canonical error identifiers,
  * deterministic stress, the Phase 9C boundary, same-id immutable-binding
- * mismatches, canonical-lane enforcement at every decision boundary, and
- * registry canonicalization.
+ * mismatches, canonical-lane enforcement at every decision boundary,
+ * registry canonicalization, plain-data record closure (own keys, symbols,
+ * descriptors, prototypes), registry lane_id uniqueness, and export-surface
+ * closure.
  *
  * No network. No DB. No env/profile access. No clock. No Git mutation.
  */
@@ -595,6 +597,112 @@ test('JPL31', () => {
   // a record with an extra field is not a canonical lane either
   const extra = Object.assign(laneInput(), { status: 'x' });
   assert.strictEqual(lane.evaluateOwnership(extra, 'writer-40').error, 'LANE_CONTRACT_INVALID');
+});
+
+// JPL32 — non-enumerable / symbol lane extras rejected
+test('JPL32', () => {
+  // non-enumerable extra string key
+  const hiddenExtra = laneInput();
+  Object.defineProperty(hiddenExtra, 'hidden_extra', { value: 'x', enumerable: false, writable: true, configurable: true });
+  const createdHidden = lane.createLane(hiddenExtra);
+  assert.strictEqual(createdHidden.ok, false);
+  assert.strictEqual(createdHidden.error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.evaluateOwnership(hiddenExtra, 'writer-40').error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.registerLane([hiddenExtra], laneInputB()).error, 'LANE_CONTRACT_INVALID');
+
+  // symbol key (enumerable)
+  const symbolExtra = laneInput();
+  symbolExtra[Symbol('meta')] = 'x';
+  const createdSymbol = lane.createLane(symbolExtra);
+  assert.strictEqual(createdSymbol.ok, false);
+  assert.strictEqual(createdSymbol.error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.evaluateStaleBaseline(symbolExtra, SHA_1).error, 'LANE_CONTRACT_INVALID');
+
+  // symbol key (non-enumerable)
+  const hiddenSymbol = laneInput();
+  Object.defineProperty(hiddenSymbol, Symbol('hidden'), { value: 'x', enumerable: false });
+  assert.strictEqual(lane.createLane(hiddenSymbol).error, 'LANE_CONTRACT_INVALID');
+});
+
+// JPL33 — custom prototype and accessor-backed lane rejected; getter not invoked
+test('JPL33', () => {
+  class FakeLane {
+    constructor() { Object.assign(this, laneInput()); }
+  }
+  const classed = new FakeLane();
+  assert.strictEqual(lane.createLane(classed).error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.evaluateOwnership(classed, 'writer-40').error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.evaluateCrossLaneClaim(classed, classed).error, 'LANE_CONTRACT_INVALID');
+
+  // accessor-backed field: no getter may ever run
+  let getterCalls = 0;
+  const accessor = laneInput();
+  Object.defineProperty(accessor, 'lane_id', {
+    get() { getterCalls += 1; return 'lane-40'; },
+    enumerable: true,
+    configurable: true,
+  });
+  const createdAccessor = lane.createLane(accessor);
+  assert.strictEqual(createdAccessor.ok, false);
+  assert.strictEqual(createdAccessor.error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.evaluateStaleBaseline(accessor, SHA_1).error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(lane.evaluateCrossLaneClaim(accessor, accessor).error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(getterCalls, 0, 'accessor getter must never be invoked');
+
+  // getter/setter pair: neither accessor may ever run
+  let accessorCalls = 0;
+  const accessorPair = laneInput();
+  Object.defineProperty(accessorPair, 'job_id', {
+    get() { accessorCalls += 1; return 'job-40'; },
+    set() { accessorCalls += 1; },
+    enumerable: true,
+    configurable: true,
+  });
+  assert.strictEqual(lane.createLane(accessorPair).error, 'LANE_CONTRACT_INVALID');
+  assert.strictEqual(accessorCalls, 0, 'accessor accessors must never be invoked');
+});
+
+// JPL34 — duplicate registry lane_id rejected (including exact duplicate)
+test('JPL34', () => {
+  const entry = JSON.parse(JSON.stringify(laneInput()));
+
+  // exact duplicate lane_id
+  const exact = lane.registerLane([entry, JSON.parse(JSON.stringify(laneInput()))], laneInputB());
+  assert.strictEqual(exact.ok, false);
+  assert.strictEqual(exact.error, 'LANE_ID_COLLISION');
+
+  // duplicate same-ID/different-writer
+  const conflicting = lane.registerLane([entry, laneInput({ writer_identity: 'writer-other' })], laneInputB());
+  assert.strictEqual(conflicting.ok, false);
+  assert.strictEqual(conflicting.error, 'LANE_OWNERSHIP_CONFLICT');
+
+  // duplicate same-ID/different-binding (same writer)
+  const rebound = lane.registerLane([entry, laneInput({ job_id: 'job-other' })], laneInputB());
+  assert.strictEqual(rebound.ok, false);
+  assert.strictEqual(rebound.error, 'LANE_ID_COLLISION');
+
+  // a UNIQUE canonical registry plus an equal candidate remains idempotent
+  const unique = lane.registerLane([JSON.parse(JSON.stringify(laneInput()))], laneInput());
+  assert.strictEqual(unique.ok, true);
+  assert.strictEqual(unique.idempotent, true);
+});
+
+// JPL35 — unsafe raw lookup surface removed (no public findLane bypass)
+test('JPL35', () => {
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(lane, 'findLane'), false);
+  assert.strictEqual(typeof lane.findLane, 'undefined');
+  assert.deepStrictEqual(Object.keys(lane).slice().sort(), [
+    'LANE_ERRORS',
+    'LANE_REQUIRED_FIELDS',
+    'canonicalizeLaneId',
+    'createLane',
+    'createLaneRegistry',
+    'evaluateCoordinationCheckout',
+    'evaluateCrossLaneClaim',
+    'evaluateOwnership',
+    'evaluateStaleBaseline',
+    'registerLane',
+  ].sort());
 });
 
 console.log('');
