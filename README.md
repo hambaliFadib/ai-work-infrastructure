@@ -21,15 +21,34 @@ Phase 2 through Phase 9A are VERIFIED. See [the architecture blueprint](docs/ARC
 
 Phase 9A acceptance: 37/37 — runner: 9/9 — policy: `context-hydration@1.0.1`.
 
+## In progress
+
+Phase 9B — Job Isolation + Parallelism: IN PROGRESS / NOT VERIFIED
+
+Governance: CONTRACT LOCKED — job-isolation@1.0.0
+
+Runtime: PARTIAL
+
+Implemented:
+- JobContract Runtime Core
+- deterministic namespace derivation primitives
+
+Remaining:
+- namespace isolation
+- parallel-lane merge/integration
+- main coordination integration
+- acceptance closure
+
 ## Target architecture
 
-- Multi-job isolation and parallel semantics — TARGET (Phase 9B)
 - Session recovery — TARGET (Phase 9C)
 - Zero-state bootstrap — PARTIAL
 - Clean-clone verification — TARGET
 - Public v1 release — TARGET
 
-Phase 9A is VERIFIED. Phase 9B and Phase 9C remain TARGET.
+Phase 9A is VERIFIED.
+Phase 9B is IN PROGRESS / NOT VERIFIED.
+Phase 9C remains TARGET.
 
 ## Safety posture
 

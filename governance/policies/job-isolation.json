@@ -3,9 +3,13 @@
   "policy_version": "1.0.0",
   "policy_ref": "job-isolation@1.0.0",
   "status": "CONTRACT_LOCKED",
-  "implementation_status": "NOT_IMPLEMENTED",
+  "implementation_status": "PARTIAL",
+  "implementation_components": {
+    "implemented": ["JOB_CONTRACT_RUNTIME_CORE", "NAMESPACE_DERIVATION_PRIMITIVES"],
+    "pending": ["NAMESPACE_ISOLATION_ENFORCEMENT", "PARALLEL_LANE_MAIN_INTEGRATION", "MAIN_COORDINATION_INTEGRATION", "PHASE_9B_ACCEPTANCE"]
+  },
   "phase": "9B",
-  "description": "Normative governance contract for Job Isolation v1: JobContract, job identity, namespace isolation, parallel lanes, capability ceilings, canonical fail-closed errors, and the Phase 9B acceptance model. Governance only - no runtime implementation is claimed.",
+  "description": "Normative governance contract for Job Isolation v1: JobContract, job identity, namespace isolation, parallel lanes, capability ceilings, canonical fail-closed errors, and the Phase 9B acceptance model. Implementation status: PARTIAL - JobContract runtime core and namespace derivation primitives are implemented; namespace isolation enforcement, parallel lane integration, main coordination integration, and Phase 9B acceptance remain pending.",
   "job_contract": {
     "required_fields": ["job_id", "profile", "session_namespace", "knowledge_scope", "evidence_namespace", "ledger_namespace", "runtime_state_namespace", "execution_permissions"],
     "unknown_fields": "FAIL_CLOSED",
