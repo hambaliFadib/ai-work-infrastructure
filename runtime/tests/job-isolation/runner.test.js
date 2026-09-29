@@ -32,11 +32,14 @@ function test(label, fn) {
   }
 }
 
-// JIR01 — exact registry = 2
+// JIR01 — exact registry = 4, canonical order, all required
 test('JIR01', () => {
   assert.ok(Array.isArray(SUITE_REGISTRY));
-  assert.strictEqual(SUITE_REGISTRY.length, 2);
-  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner']);
+  assert.strictEqual(SUITE_REGISTRY.length, 4);
+  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'job-contract', 'namespace-derivation']);
+  for (const suite of SUITE_REGISTRY) {
+    assert.strictEqual(suite.required, true, `${suite.name} must be required`);
+  }
 });
 
 // JIR02 — contract suite required
