@@ -105,18 +105,17 @@ policy:     context-hydration@1.0.1
 ### Phase 9B — Job Isolation + Parallelism
 
 ```text
-epic:     #16 — OPEN — PLANNED / NOT IMPLEMENTED
+#43  9B-00C Phase 9 architecture status truth sync  — CLOSED / VERIFIED
+
+#16  epic  — OPEN — PLANNED / NOT IMPLEMENTED
 children: 6
 
-#37  9B-01 Job Isolation Governance Contract  — temporarily blocked by #43
+#37  9B-01 Job Isolation Governance Contract  — status:ready
 #38  9B-02 JobContract Runtime Core           — blocked
 #39  9B-03 Namespace Isolation Enforcement    — blocked
 #40  9B-04 Parallel Lane Semantics            — blocked
 #41  9B-05 Main Coordination Integration      — blocked
 #42  9B-06 Acceptance Closure                 — blocked
-
-documentation truth gate: #43 — Phase 9 architecture status truth sync
-after #43 merges: #37 returns to status:ready; #38-#42 remain dependency-gated
 ```
 
 ### Phase 9C — Session Recovery

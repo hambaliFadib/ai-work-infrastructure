@@ -101,3 +101,23 @@ jobs:
           grep -Fq 'Phase 9B' docs/governance/repository-collaboration.md
           grep -Fq '#37' docs/governance/repository-collaboration.md
           grep -Fq '#42' docs/governance/repository-collaboration.md
+          test -f docs/MIGRATION-MANIFEST.md
+          grep -Fq 'Repository collaboration activation is VERIFIED' README.md
+          grep -Eq 'Phase 9A.*VERIFIED' README.md
+          grep -Fq '37/37' README.md
+          grep -Fq 'context-hydration@1.0.1' README.md
+          grep -Eq 'Phase 9B.*TARGET' README.md
+          grep -Eq 'Phase 9C.*TARGET' README.md
+          if grep -Fq 'Phase 9A is also TARGET' README.md; then echo 'stale Phase 9A TARGET claim in README.md'; exit 1; fi
+          if grep -Fq 'no Phase 9 capability is claimed as implemented' README.md; then echo 'stale no-Phase-9 claim in README.md'; exit 1; fi
+          if grep -Fq 'Repository activation is pending' README.md; then echo 'stale activation-pending claim in README.md'; exit 1; fi
+          if grep -Fq 'commits and remotes are currently absent' README.md; then echo 'stale absent-remotes claim in README.md'; exit 1; fi
+          if grep -Fq 'GitHub collaboration files belong to RCB-03 and are not created yet' README.md; then echo 'stale RCB-03 claim in README.md'; exit 1; fi
+          grep -Eq 'Phase 9A.*VERIFIED' docs/MIGRATION-MANIFEST.md
+          grep -Eq 'Phase 9B.*TARGET' docs/MIGRATION-MANIFEST.md
+          grep -Eq 'Phase 9C.*TARGET' docs/MIGRATION-MANIFEST.md
+          grep -Eq 'RCB-07.*VERIFIED' docs/MIGRATION-MANIFEST.md
+          if grep -Fq 'RCB-03 through RCB-07 are PENDING' docs/MIGRATION-MANIFEST.md; then echo 'stale RCB pending claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
+          if grep -Eq 'Phase 9A.*TARGET' docs/MIGRATION-MANIFEST.md; then echo 'stale Phase 9A TARGET state in docs/MIGRATION-MANIFEST.md'; exit 1; fi
+          if grep -Fq 'No GitHub remote' docs/MIGRATION-MANIFEST.md; then echo 'stale no-remote claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
+          if grep -Fq 'Phase 9 implementation is claimed' docs/MIGRATION-MANIFEST.md; then echo 'stale no-Phase-9-implementation claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
