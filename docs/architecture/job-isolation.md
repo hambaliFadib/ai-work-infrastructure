@@ -42,7 +42,24 @@ Isolation / ownership gates
 eligible execution context
 ```
 
-## 2. Stage Notes (Conceptual)
+## 2. Job Isolation Boundary (Conceptual)
+
+```text
+Job Isolation Boundary
+├── JobContract v1 (8 canonical fields)
+├── Derived working context
+└── Operation-specific execution context/target
+```
+
+CONCEPTUAL / NOT IMPLEMENTED
+
+- The JobContract record is exactly 8 canonical fields; unknown fields fail closed.
+- Working context is a derived job-scoped view, not a JobContract field.
+- Database targets (and similar operation-specific targets) are execution context outside the
+  JobContract schema; they cannot override job/profile, elevate permissions, or bypass
+  approval/security boundaries. Database target handling is NOT implemented runtime behavior.
+
+## 3. Stage Notes (Conceptual)
 
 1. Job creation/resolution
    - Creation authority: main coordination authority, before any job-scoped namespace write.
@@ -80,7 +97,7 @@ eligible execution context
    - The result is a validated, isolated job context. Actual execution authorization continues to
      come exclusively from the existing approval system (approval gate + safe mode).
 
-## 3. Boundary Notes
+## 4. Boundary Notes
 
 - Context Hydration: policy `context-hydration@1.0.1` remains frozen; Phase 9B adds isolation
   semantics only and does not modify the verified 9A pipeline.
@@ -91,7 +108,7 @@ eligible execution context
   tracked artifacts; worktree references use machine-neutral forms
   (`<coordination-checkout>`, `<worktree-root>/<issue-id>`).
 
-## 4. Implementation Status
+## 5. Implementation Status
 
 CONTRACT LOCKED. IMPLEMENTATION NOT STARTED. No runtime module exists for Job Isolation v1.
 Acceptance executions are declared for 9B-06 (#42).

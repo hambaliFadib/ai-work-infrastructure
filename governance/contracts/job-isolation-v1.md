@@ -61,6 +61,35 @@ JobContract v1 contains exactly these 8 normative fields, in canonical order:
 Unknown JobContract fields FAIL CLOSED in v1. A future extension requires an explicit
 policy/contract version change; v1 validators must reject unknown fields rather than ignore them.
 
+## 4.1 Job Isolation Boundary vs JobContract
+
+The Job Isolation boundary is NOT the JobContract record alone:
+
+```text
+Job Isolation Boundary
+├── JobContract v1 (8 canonical fields)
+├── derived working context
+└── operation-specific execution context/target
+```
+
+- JobContract remains exactly 8 fields (section 4).
+- Working context is a derived job-scoped view, not a JobContract field. It is derived through the
+  job-scoped namespaces (`session_namespace`, `knowledge_scope`, `evidence_namespace`,
+  `ledger_namespace`, `runtime_state_namespace`) plus the active operation's already-existing
+  objective/constraints/context where applicable. It is not independently authoritative, not a new
+  persisted identity, not caller-overridable as a JobContract field, cannot cross the `job_id`
+  boundary, and cannot bypass namespace isolation.
+- Database target is operation-specific execution context, not a JobContract field and not an
+  isolation key. It must not override `job_id` or `profile`, must not elevate
+  `execution_permissions`, and must not bypass the approval gate or safe mode. No credentials or
+  connection strings are added to JobContract; operation-specific target metadata remains outside
+  the strict 8-field schema.
+- This does not weaken fail-closed validation: the boundary layers are either derived from the
+  canonical JobContract (working context) or governed by the existing operation/execution context
+  under the already-bound job identity, profile, permission ceiling, and approval/security boundary
+  (database target). Neither layer can introduce new JobContract fields, and the strict
+  unknown-field rejection remains unchanged: unknown JobContract fields FAIL CLOSED.
+
 ## 5. Field Semantic Matrix
 
 Every field specifies: meaning, required, type, source of truth, normalization, immutability,

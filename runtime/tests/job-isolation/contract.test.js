@@ -25,6 +25,8 @@ const policy = JSON.parse(read('governance/policies/job-isolation.json'));
 const contract = read('governance/contracts/job-isolation-v1.md');
 const arch = read('docs/architecture/job-isolation.md');
 const collab = read('docs/governance/repository-collaboration.md');
+const blueprint = read('docs/ARCHITECTURE-BLUEPRINT.md');
+const workflow = read('docs/WORKFLOW.md');
 const executionContext = read('governance/schemas/execution-context.json');
 
 let passed = 0;
@@ -302,7 +304,7 @@ test('JIC31', () => {
   assert.ok(contract.includes('EP10'));
 });
 
-// JIC32 — Phase 9C boundary + context-hydration@1.0.1 freeze + docs parity
+// JIC32 — Phase 9C boundary + context-hydration@1.0.1 freeze + docs parity + boundary reconciliation
 test('JIC32', () => {
   assert.deepStrictEqual(policy.phase_9c.forbidden_states, PHASE_9C_STATES);
   assert.strictEqual(policy.context_hydration.policy_ref, 'context-hydration@1.0.1');
@@ -312,6 +314,23 @@ test('JIC32', () => {
   assert.ok(arch.includes('CONTRACT LOCKED'));
   assert.ok(arch.includes('IMPLEMENTATION NOT STARTED'));
   assert.ok(collab.includes('job-isolation@1.0.0'));
+  assert.strictEqual(policy.job_contract.required_fields.length, 8);
+  assert.strictEqual(policy.job_boundary.job_contract_field_count, 8);
+  assert.strictEqual(policy.job_boundary.working_context.job_contract_field, false);
+  assert.strictEqual(policy.job_boundary.working_context.representation, 'DERIVED_JOB_SCOPED_VIEW');
+  assert.strictEqual(policy.job_boundary.database_target.job_contract_field, false);
+  assert.strictEqual(policy.job_boundary.database_target.ownership, 'OPERATION_SPECIFIC_EXECUTION_CONTEXT');
+  assert.strictEqual(policy.job_boundary.database_target.isolation_identity, false);
+  assert.strictEqual(policy.job_boundary.database_target.may_override_job_id, false);
+  assert.strictEqual(policy.job_boundary.database_target.may_override_profile, false);
+  assert.strictEqual(policy.job_boundary.database_target.may_elevate_permissions, false);
+  assert.strictEqual(policy.job_boundary.database_target.credential_material_allowed, false);
+  assert.ok(contract.includes('Job Isolation Boundary vs JobContract'));
+  assert.ok(arch.includes('Job Isolation Boundary'));
+  assert.ok(blueprint.includes('job-isolation@1.0.0'));
+  assert.ok(!blueprint.includes('A unified JobContract does not yet exist'));
+  assert.ok(workflow.includes('job-isolation@1.0.0'));
+  assert.ok(!workflow.includes('governance not yet locked'));
 });
 
 console.log('');

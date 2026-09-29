@@ -23,5 +23,5 @@ Changes require tests, security evidence, and documentation impact review. Runti
 RCB-01 is COMPLETE. RCB-02 through RCB-07 are VERIFIED.
 
 Phase 9A is VERIFIED (37/37 acceptance, runner 9/9, policy `context-hydration@1.0.1`).
-Phase 9B is TARGET / PLANNED — governance not yet locked.
+Phase 9B is IN PROGRESS. Governance contract: LOCKED — job-isolation@1.0.0. Runtime implementation: NOT STARTED.
 Phase 9C is TARGET / NOT VERIFIED.

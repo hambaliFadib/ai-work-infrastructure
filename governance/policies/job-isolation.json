@@ -11,6 +11,25 @@
     "unknown_fields": "FAIL_CLOSED",
     "future_extension_requires_version_change": true
   },
+  "job_boundary": {
+    "job_contract_field_count": 8,
+    "working_context": {
+      "job_contract_field": false,
+      "representation": "DERIVED_JOB_SCOPED_VIEW",
+      "authoritative_identity": "JOB_CONTRACT",
+      "cross_job_bleed": "FORBIDDEN"
+    },
+    "database_target": {
+      "job_contract_field": false,
+      "ownership": "OPERATION_SPECIFIC_EXECUTION_CONTEXT",
+      "isolation_identity": false,
+      "may_override_job_id": false,
+      "may_override_profile": false,
+      "may_elevate_permissions": false,
+      "credential_material_allowed": false,
+      "connection_strings_allowed": false
+    }
+  },
   "job_id": {
     "required": true,
     "creation_authority": "MAIN_COORDINATION_AUTHORITY",
