@@ -117,10 +117,11 @@ Runtime implementation: IN PROGRESS / PARTIAL
 Implemented:
 - JobContract Runtime Core
 - deterministic namespace derivation primitives
+- ParallelLane runtime semantics
 
 Pending:
 - namespace isolation enforcement
-- merged ParallelLane semantics
+- parallel-lane main-coordination integration
 - main coordination integration
 - Phase 9B acceptance
 

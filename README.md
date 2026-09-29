@@ -32,10 +32,11 @@ Runtime: PARTIAL
 Implemented:
 - JobContract Runtime Core
 - deterministic namespace derivation primitives
+- ParallelLane runtime semantics
 
 Remaining:
 - namespace isolation
-- parallel-lane merge/integration
+- parallel-lane main-coordination integration
 - main coordination integration
 - acceptance closure
 

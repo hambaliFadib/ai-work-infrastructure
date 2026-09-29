@@ -67,7 +67,7 @@ test('JIC01', () => {
   assert.strictEqual(policy.policy_ref, 'job-isolation@1.0.0');
   assert.strictEqual(policy.status, 'CONTRACT_LOCKED');
   assert.strictEqual(policy.implementation_status, 'PARTIAL');
-  assert.deepStrictEqual(policy.implementation_components.implemented, ['JOB_CONTRACT_RUNTIME_CORE', 'NAMESPACE_DERIVATION_PRIMITIVES']);
+  assert.deepStrictEqual(policy.implementation_components.implemented, ['JOB_CONTRACT_RUNTIME_CORE', 'NAMESPACE_DERIVATION_PRIMITIVES', 'PARALLEL_LANE_SEMANTICS']);
   assert.deepStrictEqual(policy.implementation_components.pending, ['NAMESPACE_ISOLATION_ENFORCEMENT', 'PARALLEL_LANE_MAIN_INTEGRATION', 'MAIN_COORDINATION_INTEGRATION', 'PHASE_9B_ACCEPTANCE']);
 });
 
@@ -82,7 +82,8 @@ test('JIC02', () => {
   assert.ok(!contract.includes('pending merge verification'));
   assert.ok(contract.includes('9B-03 Namespace Isolation:'));
   assert.ok(contract.includes('9B-04 Parallel Lane:'));
-  assert.ok(contract.includes('NOT MERGED'));
+  assert.ok(/9B-04 Parallel Lane:\s*IMPLEMENTED \/ VERIFIED/.test(contract));
+  assert.ok(!contract.includes('NOT MERGED'));
   assert.ok(contract.includes('9B-05 Integration:'));
   assert.ok(contract.includes('9B-06 Acceptance:'));
   assert.ok(contract.includes('NOT VERIFIED'));
@@ -367,11 +368,16 @@ test('JIC33', () => {
   assert.ok(!workflow.includes('Runtime implementation: NOT STARTED'));
   assert.ok(/#38\s+9B-02 JobContract Runtime Core\s+— CLOSED \/ VERIFIED/.test(collab));
   assert.ok(/#39\s+9B-03 Namespace Isolation Enforcement\s+— status:ready/.test(collab));
-  assert.ok(/#40\s+9B-04 Parallel Lane Semantics\s+— status:integration/.test(collab));
+  assert.ok(/#40\s+9B-04 Parallel Lane Semantics\s+— CLOSED \/ VERIFIED/.test(collab));
   assert.ok(/#41\s+9B-05 Main Coordination Integration\s+— status:blocked/.test(collab));
   assert.ok(/#42\s+9B-06 Acceptance Closure\s+— status:blocked/.test(collab));
   assert.ok(collab.includes('CONTRACT_LOCKED / PARTIAL'));
   assert.ok(collab.includes('IN PROGRESS / PARTIAL'));
+  assert.ok(policy.implementation_components.implemented.includes('PARALLEL_LANE_SEMANTICS'));
+  assert.ok(arch.includes('ParallelLane runtime semantics'));
+  assert.ok(readme.includes('ParallelLane runtime semantics'));
+  assert.ok(blueprint.includes('ParallelLane runtime semantics'));
+  assert.ok(workflow.includes('ParallelLane runtime semantics'));
   assert.ok(readme.includes('Phase 9B'));
   assert.ok(readme.includes('IN PROGRESS'));
   assert.ok(readme.includes('NOT VERIFIED'));

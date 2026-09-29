@@ -113,7 +113,7 @@ children: 6
 #37  9B-01 Job Isolation Governance Contract  — CLOSED / VERIFIED
 #38  9B-02 JobContract Runtime Core           — CLOSED / VERIFIED
 #39  9B-03 Namespace Isolation Enforcement    — status:ready
-#40  9B-04 Parallel Lane Semantics            — status:integration
+#40  9B-04 Parallel Lane Semantics            — CLOSED / VERIFIED
 #41  9B-05 Main Coordination Integration      — status:blocked
 #42  9B-06 Acceptance Closure                 — status:blocked
 
