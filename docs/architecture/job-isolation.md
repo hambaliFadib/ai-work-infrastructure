@@ -8,7 +8,7 @@ Governance issue: #37 (9B-01)
 
 This document describes the architecture of Job Isolation v1 as locked by
 `governance/contracts/job-isolation-v1.md`. The JobContract core and namespace derivation
-primitives are implemented runtime modules; remaining stages are conceptual.
+primitives, and ParallelLane runtime semantics are implemented modules; remaining stages are conceptual.
 
 All flow descriptions below are:
 
@@ -116,12 +116,14 @@ CONTRACT LOCKED. RUNTIME IMPLEMENTATION: IN PROGRESS / PARTIAL.
 Implemented:
 - JobContract Runtime Core (runtime/job-isolation/job-contract.js, 9B-02 / #38)
 - deterministic namespace derivation primitives (runtime/job-isolation/namespace-derivation.js, 9B-02 / #38)
+- ParallelLane runtime semantics (runtime/job-isolation/parallel-lane.js, 9B-04 / #40)
 
 Pending:
 - namespace isolation enforcement (9B-03 / #39)
-- merged ParallelLane semantics (9B-04 / #40)
+- trusted/audited lane synchronization recognition (9B-05 / #41)
 - main coordination integration (9B-05 / #41)
 - Phase 9B acceptance (9B-06 / #42)
 
-Isolation enforcement is NOT implemented. Parallel-lane semantics are NOT merged.
-Acceptance executions are declared for 9B-06 (#42) and are NOT VERIFIED.
+ParallelLane semantics implemented is NOT the same as ParallelLane integrated into main
+coordination. Isolation enforcement is NOT implemented. Trusted/audited lane synchronization
+recognition is NOT implemented. Acceptance executions are declared for 9B-06 (#42) and are NOT VERIFIED.

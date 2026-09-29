@@ -23,5 +23,5 @@ Changes require tests, security evidence, and documentation impact review. Runti
 RCB-01 is COMPLETE. RCB-02 through RCB-07 are VERIFIED.
 
 Phase 9A is VERIFIED (37/37 acceptance, runner 9/9, policy `context-hydration@1.0.1`).
-Phase 9B is IN PROGRESS. Governance contract: LOCKED — job-isolation@1.0.0. Runtime implementation: IN PROGRESS / PARTIAL — #38 JobContract Runtime Core implemented; deterministic namespace derivation primitives implemented; namespace isolation enforcement, parallel-lane integration, and main coordination integration remain pending. Phase 9B acceptance: NOT VERIFIED.
+Phase 9B is IN PROGRESS. Governance contract: LOCKED — job-isolation@1.0.0. Runtime implementation: IN PROGRESS / PARTIAL — #38 JobContract Runtime Core implemented; deterministic namespace derivation primitives implemented; ParallelLane runtime semantics implemented; namespace isolation enforcement, parallel-lane main-coordination integration, and main coordination integration remain pending. Phase 9B acceptance: NOT VERIFIED.
 Phase 9C is TARGET / NOT VERIFIED.

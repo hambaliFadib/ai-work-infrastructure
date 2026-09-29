@@ -32,11 +32,11 @@ function test(label, fn) {
   }
 }
 
-// JIR01 — exact registry = 4, canonical order, all required
+// JIR01 — exact registry = 5, canonical order, all required
 test('JIR01', () => {
   assert.ok(Array.isArray(SUITE_REGISTRY));
-  assert.strictEqual(SUITE_REGISTRY.length, 4);
-  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'job-contract', 'namespace-derivation']);
+  assert.strictEqual(SUITE_REGISTRY.length, 5);
+  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'job-contract', 'namespace-derivation', 'parallel-lane']);
   for (const suite of SUITE_REGISTRY) {
     assert.strictEqual(suite.required, true, `${suite.name} must be required`);
   }
@@ -94,8 +94,9 @@ test('JIR07', () => {
   assert.ok(errors.length > 0, 'duplicate registration must be rejected');
 });
 
-// JIR08 — deterministic execution order contract -> runner
+// JIR08 — deterministic execution order contract -> runner -> combined registry
 test('JIR08', () => {
+  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'job-contract', 'namespace-derivation', 'parallel-lane'], 'registry order must be deterministic');
   assert.ok(RUNNER_SOURCE.includes('for (const suite of registry)'), 'runner must iterate the registry sequentially');
   fs.mkdirSync(TMP_DIR, { recursive: true });
   const relativeDir = `tmp/runner-${process.pid}`;
