@@ -15,19 +15,21 @@ It owns the OpenCode control plane: contracts, governance boundaries, bootstrap 
 | Oracle safe core | VERIFIED |
 | Oracle secure read-only integration | VERIFIED |
 | Oracle live writes | DISABLED |
+| Context Hydration (Phase 9A) | VERIFIED |
 
-Phase 2 through Phase 8 are VERIFIED. See [the architecture blueprint](docs/ARCHITECTURE-BLUEPRINT.md) for the evidence boundary.
+Phase 2 through Phase 9A are VERIFIED. See [the architecture blueprint](docs/ARCHITECTURE-BLUEPRINT.md) for the evidence boundary.
+
+Phase 9A acceptance: 37/37 — runner: 9/9 — policy: `context-hydration@1.0.1`.
 
 ## Target architecture
 
-- Context Hydration — TARGET
 - Multi-job isolation and parallel semantics — TARGET (Phase 9B)
 - Session recovery — TARGET (Phase 9C)
 - Zero-state bootstrap — PARTIAL
 - Clean-clone verification — TARGET
 - Public v1 release — TARGET
 
-Phase 9A is also TARGET; no Phase 9 capability is claimed as implemented.
+Phase 9A is VERIFIED. Phase 9B and Phase 9C remain TARGET.
 
 ## Safety posture
 
@@ -50,4 +52,4 @@ Runtime state, credentials, sessions, browser profiles, generated logs, database
 - [Security boundary](docs/SECURITY-BOUNDARY.md)
 - [Environment and secret contract](docs/ENVIRONMENT.md)
 
-Repository activation is pending: commits and remotes are currently absent. GitHub collaboration files belong to RCB-03 and are not created yet.
+Repository collaboration activation is VERIFIED. RCB-01 through RCB-07 are COMPLETE / VERIFIED; the protected GitHub issue/branch/PR/CI workflow is active.

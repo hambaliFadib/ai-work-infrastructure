@@ -34,7 +34,7 @@ Skill != agent. Skill != permission elevation. Skill != policy override. Skill !
 
 `state/sessions` = operational session state; `knowledge/sources` = raw/reference knowledge; `knowledge/curated` = reviewed reusable knowledge; `opencode-mem` = semantic/probabilistic recall; `opencode.db` = local conversation/runtime persistence.
 
-Storage architecture = existing. Deterministic Context Hydration = TARGET.
+Storage architecture = existing. Deterministic Context Hydration = VERIFIED (Phase 9A — 37/37 acceptance, runner 9/9, policy context-hydration@1.0.1).
 
 Environment precedence is `profile > root > inherited`; stale inherited PROFILE-scoped variables are purged when a profile is selected. The managed contract has 10 variables: 3 GLOBAL and 7 PROFILE.
 
@@ -52,9 +52,13 @@ OpenCode → Oracle MCP stdio → tool handler → policy
 
 Oracle Core = VERIFIED. Oracle Driver = VERIFIED. Oracle MCP stdio = VERIFIED. M01–M08 = PASS. Live Read = VERIFIED. Live Write = DISABLED. The exact tools are `oracle_health`, `oracle_read`, `oracle_insert`, `oracle_update`, and `oracle_ddl`. `oracle_delete`, `oracle_raw_sql`, `oracle_execute_sql`, and `run_sql` are ABSENT. Live INSERT, UPDATE, and DDL are blocked.
 
-# TARGET ARCHITECTURE
+# PHASE 9 ARCHITECTURE
 
-## Context Hydration — TARGET
+Phase 9A is VERIFIED (37/37 acceptance, runner 9/9, policy context-hydration@1.0.1). Phase 9B and Phase 9C remain TARGET.
+
+## Context Hydration — VERIFIED (Phase 9A)
+
+Phase 9A acceptance: 37/37 — runner: 9/9 — policy: `context-hydration@1.0.1`.
 
 Mandatory context → deterministic; curated knowledge → relevance-based; raw sources → explicit/on-demand; semantic memory → advisory retrieval.
 
@@ -72,25 +76,25 @@ Session Start
   ↓ ContextPackage
 ```
 
-## Objective Parser — TARGET
+## Objective Parser — VERIFIED (Phase 9A)
 
 Input: `session_id`, `job_id`, latest checkpoint, user request, active constraints, and optional explicit objective. Output: `StructuredObjective` with objective_id, summary, intent, scope, entities[], constraints[], retrieval_terms[], confidence, and provenance. HIGH >= 0.80, MEDIUM >= 0.60, LOW < 0.60. LOW confidence means mandatory-only hydration and automatic retrieval disabled.
 
-## Scoring and policy versioning — TARGET
+## Scoring and policy versioning — VERIFIED (Phase 9A)
 
-Weights: semantic relevance = 0.50, scope specificity = 0.25, authority = 0.20, recency = 0.05. Foreign-job knowledge is a hard reject before scoring. Tie-break: 1) total_score DESC, 2) scope_specificity DESC, 3) authority DESC, 4) updated_at DESC, 5) source_id ASC. Behavior-affecting changes require a policy version increment. Target identity: `context-hydration@1.0.1`. 1.0.0 is the initial merged contract; 1.0.1 supersedes it as the implementation target after post-merge determinism corrections.
+Weights: semantic relevance = 0.50, scope specificity = 0.25, authority = 0.20, recency = 0.05. Foreign-job knowledge is a hard reject before scoring. Tie-break: 1) total_score DESC, 2) scope_specificity DESC, 3) authority DESC, 4) updated_at DESC, 5) source_id ASC. Behavior-affecting changes require a policy version increment. Policy identity: `context-hydration@1.0.1`. 1.0.0 is the initial merged contract; 1.0.1 supersedes it after post-merge determinism corrections.
 
-## Context budget and omitted retention — TARGET
+## Context budget and omitted retention — VERIFIED (Phase 9A)
 
 Mandatory context protected; active conversation protected/bounded; retrieved knowledge bounded; execution results bounded; response headroom reserved. Retrieved knowledge <= 20% available context. Never silently drop current objective, job/profile identity, active safety constraints, approval state, latest valid checkpoint, or mandatory project instructions.
 
 Full omitted content retention = 0. Allowed metadata: source_id, source_type, scope, score, rank, omission_reason, estimated_tokens, hydration_run_id. Default metadata retention = 30 days, local-only, redacted.
 
-## Skill chain — TARGET
+## Skill chain — VERIFIED (Phase 9A)
 
 Classify skills as PRIMARY, SUPPORTING, or CONFLICTING. DEFAULT MAX = 3. USER EXPLICIT OVERRIDE MAX = 5. HARD LIMIT = 5. Conflicts fail closed. Never silently truncate.
 
-## Phase 9A acceptance contract — TARGET
+## Phase 9A acceptance contract — VERIFIED (Phase 9A)
 
 O01 explicit objective preserved; O02 clear request produces structured objective; O03 scope extracted correctly; O04 active constraints preserved; O05 provenance preserved; O06 low-confidence objective blocks retrieval; O07 low-confidence still loads mandatory context; O08 ambiguous objective does not invent entities; O09 identical input + policy produces identical objective; O10 explicit objective outranks inferred objective.
 
@@ -98,7 +102,7 @@ H01 mandatory context always loaded; H02 relevant curated item retrieved; H03 ir
 
 S01 one matching skill; S02 two compatible skills chain correctly; S03 three skills allowed by default; S04 four skills require explicit override; S05 five skills allowed only with override; S06 six skills hard rejected; S07 chain never silently truncated; S08 conflicting skills fail closed; S09 explicit user skill retained; S10 skill cannot override runtime policy.
 
-Total: 37 locked Phase 9A acceptance invariants. Executable contracts remain owned by future issue 9A-01 and are not created here.
+Total: 37 locked Phase 9A acceptance invariants. Acceptance result: 37/37 VERIFIED (O 10/10, H 17/17, S 10/10); runner 9/9.
 
 ## Multi-job isolation and parallel semantics — TARGET — Phase 9B
 
@@ -110,4 +114,4 @@ Target states: NEW, ACTIVE, CHECKPOINTED, BLOCKED, INTERRUPTED, FAILED, CONFLICT
 
 # V1 DEFINITION OF DONE
 
-Phase 2–8 are VERIFIED. Phase 9A–9C must reach VERIFIED with acceptance evidence before clean-clone or public-v1 claims are made. Zero-state bootstrap is PARTIAL, clean-clone verification is TARGET, and public v1 release is TARGET.
+Phase 2–9A are VERIFIED. Phase 9B–9C must reach VERIFIED with acceptance evidence before Architecture Freeze v1 is eligible. Architecture Freeze v1 = NOT CLAIMED. Zero-state bootstrap is PARTIAL; clean-clone verification and public v1 release remain TARGET.

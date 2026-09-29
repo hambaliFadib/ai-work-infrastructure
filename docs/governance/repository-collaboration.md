@@ -80,22 +80,42 @@ GitHub issues remain authoritative backlog. Documentation reflects verified stat
 ### Phase 9A — Context Hydration
 
 ```text
-epic:     #7  status:ready
-9A-01:    #8  status:ready     (governance contract)
-9A-02:    #9  status:blocked   (objective parser)
-9A-03:    #10 status:blocked   (ranking policy)
-9A-04:    #11 status:blocked   (retrieval adapters)
-9A-05:    #12 status:blocked   (budget + ContextPackage)
-9A-06:    #13 status:blocked   (skill resolver)
-9A-07:    #14 status:blocked   (integration)
-9A-08:    #15 status:blocked   (acceptance 37/37)
+VERIFIED / CLOSED
+
+#7    epic                                    CLOSED / COMPLETED
+#8    9A-01 governance contract               CLOSED
+#20   9A-01C determinism contract correction  CLOSED
+#22   9A-01D parallel test-runner gate        CLOSED
+#24   9A-01E runner concurrency correction    CLOSED
+#9    9A-02 objective parser                  CLOSED
+#10   9A-03 ranking policy                    CLOSED
+#11   9A-04 retrieval adapters                CLOSED
+#12   9A-05 budget + ContextPackage           CLOSED
+#13   9A-06 skill resolver                    CLOSED
+#31   9A-06C pre-integration semantics lock   CLOSED
+#14   9A-07 integration                       CLOSED
+#34   9A-08P H03 acceptance semantics lock    CLOSED
+#15   9A-08 acceptance closure                CLOSED / COMPLETED
+
+acceptance: 37/37
+runner:     9/9
+policy:     context-hydration@1.0.1
 ```
 
 ### Phase 9B — Job Isolation + Parallelism
 
 ```text
-epic:     #16 status:blocked (blocked until Phase 9A VERIFIED)
-children: 0
+#43  9B-00C Phase 9 architecture status truth sync  — CLOSED / VERIFIED
+
+#16  epic  — OPEN — PLANNED / NOT IMPLEMENTED
+children: 6
+
+#37  9B-01 Job Isolation Governance Contract  — status:ready
+#38  9B-02 JobContract Runtime Core           — blocked
+#39  9B-03 Namespace Isolation Enforcement    — blocked
+#40  9B-04 Parallel Lane Semantics            — blocked
+#41  9B-05 Main Coordination Integration      — blocked
+#42  9B-06 Acceptance Closure                 — blocked
 ```
 
 ### Phase 9C — Session Recovery
@@ -107,4 +127,4 @@ children: 0
 
 ## Not yet activated
 
-Labels, milestones, and hosted configuration are TARGET. Public v1 release and clean-clone verification are TARGET.
+Public v1 release and clean-clone verification are TARGET.

@@ -4,7 +4,13 @@ This document preserves migration history while separating historical context fr
 
 ## Current status
 
-Phase 2–8 are VERIFIED. RCB-01 is COMPLETE and RCB-02 is CURRENT. RCB-03 through RCB-07 are PENDING. Phase 9A Context Hydration, Phase 9B Job Isolation + Parallelism, and Phase 9C Session Recovery are TARGET.
+Phase 2–9A are VERIFIED. RCB-01 through RCB-07 are COMPLETE / VERIFIED.
+
+Phase 9A Context Hydration is VERIFIED: 37/37 acceptance, runner 9/9, policy `context-hydration@1.0.1`.
+
+Phase 9B Job Isolation + Parallelism is TARGET / PLANNED. Phase 9C Session Recovery is TARGET / NOT VERIFIED.
+
+Architecture Freeze is NOT CLAIMED.
 
 ## Migration principles
 
@@ -48,4 +54,6 @@ Historical references to client workflows, legacy workspaces, project names, and
 
 ## Current boundary
 
-Local-only state is excluded by ignore rules. No GitHub remote, public release, clean-clone verification, or Phase 9 implementation is claimed. These remain future activation or target work.
+Local-only state continues to be excluded by ignore rules. GitHub repository collaboration is activated and governed. Phase 9A is implemented and VERIFIED.
+
+Phase 9B and Phase 9C remain future target work. Clean-clone verification and public v1 release remain TARGET.

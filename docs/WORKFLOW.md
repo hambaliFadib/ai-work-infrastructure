@@ -20,4 +20,8 @@ Changes require tests, security evidence, and documentation impact review. Runti
 
 ## Current activation state
 
-RCB-01 is complete. RCB-02 through RCB-05 are verified. RCB-06 branch rules and RCB-07 project metadata are pending. Phase 9A, 9B, and 9C remain TARGET.
+RCB-01 is COMPLETE. RCB-02 through RCB-07 are VERIFIED.
+
+Phase 9A is VERIFIED (37/37 acceptance, runner 9/9, policy `context-hydration@1.0.1`).
+Phase 9B is TARGET / PLANNED — governance not yet locked.
+Phase 9C is TARGET / NOT VERIFIED.
