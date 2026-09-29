@@ -17,6 +17,7 @@ const path = require('path');
 const SUITE_REGISTRY = [
   { name: 'contract', file: 'contract.test.js', required: true },
   { name: 'runner', file: 'runner.test.js', required: true },
+  { name: 'parallel-lane', file: 'parallel-lane.test.js', required: true },
 ];
 
 const DIR = __dirname;

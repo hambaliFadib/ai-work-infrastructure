@@ -32,11 +32,11 @@ function test(label, fn) {
   }
 }
 
-// JIR01 — exact registry = 2
+// JIR01 — exact registry = 3
 test('JIR01', () => {
   assert.ok(Array.isArray(SUITE_REGISTRY));
-  assert.strictEqual(SUITE_REGISTRY.length, 2);
-  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner']);
+  assert.strictEqual(SUITE_REGISTRY.length, 3);
+  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'parallel-lane']);
 });
 
 // JIR02 — contract suite required
@@ -91,8 +91,9 @@ test('JIR07', () => {
   assert.ok(errors.length > 0, 'duplicate registration must be rejected');
 });
 
-// JIR08 — deterministic execution order contract -> runner
+// JIR08 — deterministic execution order contract -> runner -> parallel-lane
 test('JIR08', () => {
+  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'parallel-lane'], 'registry order must be deterministic');
   assert.ok(RUNNER_SOURCE.includes('for (const suite of registry)'), 'runner must iterate the registry sequentially');
   fs.mkdirSync(TMP_DIR, { recursive: true });
   const relativeDir = `tmp/runner-${process.pid}`;

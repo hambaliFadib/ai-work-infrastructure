@@ -1,0 +1,306 @@
+/**
+ * ParallelLane v1 — pure lane semantics for job-isolation@1.0.0.
+ *
+ * Implements ONLY the locked ParallelLane semantics from
+ * governance/contracts/job-isolation-v1.md (sections 17-20):
+ * structural validation, lane identity, lane ownership, cross-lane claims,
+ * coordination checkout validation, and stale main baseline evaluation.
+ *
+ * Properties:
+ * - pure and deterministic: no wall clock, no randomness, no environment input;
+ * - no Git mutation of any kind (no checkout, no branch switch, no commit);
+ * - no filesystem access, no network, no child processes;
+ * - every failure returns a canonical UPPER_SNAKE error identifier from the
+ *   locked job-isolation@1.0.0 canonical error list;
+ * - all returned structures are frozen and copy-safe; inputs are never mutated.
+ *
+ * Not implemented here (explicitly out of scope):
+ * - JobContract core validation (9B-03 / #38);
+ * - namespace derivation and namespace enforcement;
+ * - recovery/resume state transitions (Phase 9C);
+ * - any approval-system behavior.
+ */
+
+'use strict';
+
+/** Canonical ParallelLane v1 fields, in canonical order. Exactly these six. */
+const LANE_REQUIRED_FIELDS = Object.freeze([
+  'lane_id',
+  'job_id',
+  'branch',
+  'worktree',
+  'writer_identity',
+  'baseline_main_sha',
+]);
+
+/**
+ * Canonical error identifiers used by ParallelLane semantics.
+ * All six are locked by job-isolation@1.0.0; no further error is introduced.
+ */
+const LANE_ERRORS = Object.freeze({
+  LANE_CONTRACT_INVALID: 'LANE_CONTRACT_INVALID',
+  LANE_ID_COLLISION: 'LANE_ID_COLLISION',
+  LANE_OWNERSHIP_CONFLICT: 'LANE_OWNERSHIP_CONFLICT',
+  CROSS_LANE_WRITE_REJECTED: 'CROSS_LANE_WRITE_REJECTED',
+  COORDINATION_CHECKOUT_VIOLATION: 'COORDINATION_CHECKOUT_VIOLATION',
+  STALE_MAIN_BASELINE: 'STALE_MAIN_BASELINE',
+});
+
+const LANE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const MAIN_SHA_PATTERN = /^[0-9a-f]{40}$/;
+const COORDINATION_BRANCH = 'main';
+
+function isPlainObject(value) {
+  if (value === null || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/** Frozen success envelope. */
+function pass(values) {
+  return Object.freeze(Object.assign({ ok: true }, values));
+}
+
+/** Frozen fail-closed envelope carrying a canonical error identifier. */
+function reject(error, extra) {
+  return Object.freeze(Object.assign({ ok: false, error }, extra));
+}
+
+/**
+ * Canonicalize a raw lane_id: NFKC, trim, lowercase, then structural pattern.
+ * Invalid structure fails closed with LANE_CONTRACT_INVALID.
+ * Never generates an identifier (no wall clock, no randomness).
+ */
+function canonicalizeLaneId(raw) {
+  if (typeof raw !== 'string') return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  const laneId = raw.normalize('NFKC').trim().toLowerCase();
+  if (!LANE_ID_PATTERN.test(laneId)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  return pass({ lane_id: laneId });
+}
+
+/**
+ * Create a canonical frozen ParallelLane from untrusted input.
+ *
+ * Structural validity (fail-closed, LANE_CONTRACT_INVALID):
+ * - exactly the six canonical fields; unknown fields fail closed
+ *   (this is how lifecycle/status/recovery/agent fields are excluded);
+ * - all six fields present;
+ * - lane_id canonicalized (NFKC, trim, lowercase, pattern);
+ * - job_id, branch, worktree, writer_identity are non-empty runtime strings;
+ * - baseline_main_sha matches ^[0-9a-f]{40}$.
+ *
+ * Coordination constraint (fail-closed, COORDINATION_CHECKOUT_VIOLATION):
+ * - a writer-lane branch must never be the coordination branch (main).
+ *
+ * job_id is treated as an already-canonicalized job binding; full JobContract
+ * validation belongs to the JobContract core and is NOT reimplemented here.
+ * No Git mutation is performed.
+ */
+function createLane(input) {
+  if (!isPlainObject(input)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+
+  for (const key of Object.keys(input)) {
+    if (!LANE_REQUIRED_FIELDS.includes(key)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  for (const field of LANE_REQUIRED_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(input, field)) {
+      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+    }
+  }
+
+  const laneId = canonicalizeLaneId(input.lane_id);
+  if (!laneId.ok) return laneId;
+
+  for (const field of ['job_id', 'branch', 'worktree', 'writer_identity']) {
+    const value = input[field];
+    if (typeof value !== 'string' || value.length === 0) {
+      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+    }
+  }
+
+  const baselineMainSha = input.baseline_main_sha;
+  if (typeof baselineMainSha !== 'string' || !MAIN_SHA_PATTERN.test(baselineMainSha)) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+
+  if (input.branch === COORDINATION_BRANCH) {
+    return reject(LANE_ERRORS.COORDINATION_CHECKOUT_VIOLATION);
+  }
+
+  return pass({
+    lane: Object.freeze({
+      lane_id: laneId.lane_id,
+      job_id: input.job_id,
+      branch: input.branch,
+      worktree: input.worktree,
+      writer_identity: input.writer_identity,
+      baseline_main_sha: baselineMainSha,
+    }),
+  });
+}
+
+/** Create an empty frozen lane registry. */
+function createLaneRegistry() {
+  return Object.freeze([]);
+}
+
+/** Deterministic lookup by canonical lane_id. Returns the lane or null. */
+function findLane(registry, laneId) {
+  if (!Array.isArray(registry) || typeof laneId !== 'string') return null;
+  for (const lane of registry) {
+    if (lane !== null && typeof lane === 'object' && lane.lane_id === laneId) return lane;
+  }
+  return null;
+}
+
+/** Structural equality over the six canonical fields. */
+function lanesEqual(a, b) {
+  return LANE_REQUIRED_FIELDS.every((field) => a[field] === b[field]);
+}
+
+/**
+ * Register a lane into a registry (pure; the input registry is never mutated).
+ *
+ * - new canonical lane_id: returns a new frozen registry with the lane appended;
+ * - exact same canonical lane: deterministic reuse, idempotent, no duplicate;
+ * - same lane_id with a different job_id (job rebinding): LANE_ID_COLLISION;
+ * - same lane_id with a different writer_identity: LANE_OWNERSHIP_CONFLICT;
+ * - same lane_id with any other different immutable binding: LANE_ID_COLLISION.
+ */
+function registerLane(registry, input) {
+  if (!Array.isArray(registry)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+
+  const created = createLane(input);
+  if (!created.ok) return created;
+  const lane = created.lane;
+
+  const existing = findLane(registry, lane.lane_id);
+  if (existing === null) {
+    return pass({ registry: Object.freeze(registry.concat([lane])), lane });
+  }
+  if (lanesEqual(existing, lane)) {
+    return pass({ registry, lane: existing, idempotent: true });
+  }
+  if (existing.job_id !== lane.job_id) {
+    return reject(LANE_ERRORS.LANE_ID_COLLISION);
+  }
+  if (existing.writer_identity !== lane.writer_identity) {
+    return reject(LANE_ERRORS.LANE_OWNERSHIP_CONFLICT);
+  }
+  return reject(LANE_ERRORS.LANE_ID_COLLISION);
+}
+
+/**
+ * Lane ownership: one active writer per lane.
+ * Same lane + same writer is valid; a different writer fails closed with
+ * LANE_OWNERSHIP_CONFLICT. Never mutates lane ownership data.
+ */
+function evaluateOwnership(lane, writerIdentity) {
+  if (!isPlainObject(lane)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  if (typeof lane.lane_id !== 'string' || lane.lane_id.length === 0) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  if (typeof lane.writer_identity !== 'string' || lane.writer_identity.length === 0) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  if (typeof writerIdentity !== 'string' || writerIdentity.length === 0) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  if (lane.writer_identity === writerIdentity) {
+    return pass({ lane_id: lane.lane_id, writer_identity: writerIdentity });
+  }
+  return reject(LANE_ERRORS.LANE_OWNERSHIP_CONFLICT);
+}
+
+/**
+ * Cross-lane claim: a writer belonging to one lane must not claim or write
+ * another lane as that other lane's writer.
+ *
+ * - same canonical lane identity: allowed for the owning writer; a different
+ *   writer on the same lane identity remains LANE_OWNERSHIP_CONFLICT;
+ * - different lane identities: CROSS_LANE_WRITE_REJECTED (detection only).
+ */
+function evaluateCrossLaneClaim(claimantLane, targetLane) {
+  if (!isPlainObject(claimantLane) || !isPlainObject(targetLane)) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  for (const lane of [claimantLane, targetLane]) {
+    if (typeof lane.lane_id !== 'string' || lane.lane_id.length === 0) {
+      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+    }
+    if (typeof lane.writer_identity !== 'string' || lane.writer_identity.length === 0) {
+      return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+    }
+  }
+  if (claimantLane.lane_id === targetLane.lane_id) {
+    if (claimantLane.writer_identity === targetLane.writer_identity) {
+      return pass({ lane_id: targetLane.lane_id });
+    }
+    return reject(LANE_ERRORS.LANE_OWNERSHIP_CONFLICT);
+  }
+  return reject(LANE_ERRORS.CROSS_LANE_WRITE_REJECTED);
+}
+
+/**
+ * Coordination checkout validation (pure; no branch switching).
+ * The coordination checkout remains on the coordination branch (main);
+ * anything else fails closed with COORDINATION_CHECKOUT_VIOLATION.
+ */
+function evaluateCoordinationCheckout(branch) {
+  if (typeof branch !== 'string' || branch.length === 0) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  if (branch === COORDINATION_BRANCH) return pass({ branch });
+  return reject(LANE_ERRORS.COORDINATION_CHECKOUT_VIOLATION);
+}
+
+/**
+ * Explicit synchronization evidence must reference the authoritative main
+ * baseline the lane synchronized to. Anything else is not explicit evidence.
+ */
+function isExplicitSyncEvidence(evidence, authoritativeMainSha) {
+  if (!isPlainObject(evidence)) return false;
+  const target = evidence.synchronized_to_sha;
+  return typeof target === 'string' && MAIN_SHA_PATTERN.test(target) && target === authoritativeMainSha;
+}
+
+/**
+ * Stale main baseline evaluation (detection only; no automatic sync, no
+ * recovery transition, and the original lane baseline is never mutated).
+ *
+ * - lane baseline equals authoritative main: fresh;
+ * - different and no explicit synchronization evidence: STALE_MAIN_BASELINE;
+ * - different with explicit synchronization evidence naming the authoritative
+ *   main baseline: may pass evaluation without mutating the lane baseline.
+ */
+function evaluateStaleBaseline(lane, authoritativeMainSha, intentionalSyncEvidence) {
+  if (!isPlainObject(lane)) return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  if (typeof lane.baseline_main_sha !== 'string' || !MAIN_SHA_PATTERN.test(lane.baseline_main_sha)) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  if (typeof authoritativeMainSha !== 'string' || !MAIN_SHA_PATTERN.test(authoritativeMainSha)) {
+    return reject(LANE_ERRORS.LANE_CONTRACT_INVALID);
+  }
+  if (lane.baseline_main_sha === authoritativeMainSha) {
+    return pass({ stale: false, synchronized: false });
+  }
+  if (isExplicitSyncEvidence(intentionalSyncEvidence, authoritativeMainSha)) {
+    return pass({ stale: false, synchronized: true });
+  }
+  return reject(LANE_ERRORS.STALE_MAIN_BASELINE, { stale: true });
+}
+
+module.exports = Object.freeze({
+  LANE_REQUIRED_FIELDS,
+  LANE_ERRORS,
+  canonicalizeLaneId,
+  createLane,
+  createLaneRegistry,
+  findLane,
+  registerLane,
+  evaluateOwnership,
+  evaluateCrossLaneClaim,
+  evaluateCoordinationCheckout,
+  evaluateStaleBaseline,
+});
