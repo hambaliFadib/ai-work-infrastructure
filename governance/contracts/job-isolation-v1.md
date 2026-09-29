@@ -10,7 +10,7 @@ Governance issue: #37 (9B-01)
 Implementation status by sub-issue:
 
 9B-02 JobContract Runtime Core:
-IMPLEMENTED / pending merge verification
+IMPLEMENTED / VERIFIED
 
 9B-03 Namespace Isolation:
 NOT IMPLEMENTED

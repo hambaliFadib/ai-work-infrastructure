@@ -78,7 +78,8 @@ test('JIC02', () => {
   assert.ok(contract.includes('Implementation: PARTIAL'));
   assert.ok(!contract.includes('Implementation: NOT IMPLEMENTED'));
   assert.ok(contract.includes('9B-02 JobContract Runtime Core:'));
-  assert.ok(contract.includes('IMPLEMENTED / pending merge verification'));
+  assert.ok(contract.includes('IMPLEMENTED / VERIFIED'));
+  assert.ok(!contract.includes('pending merge verification'));
   assert.ok(contract.includes('9B-03 Namespace Isolation:'));
   assert.ok(contract.includes('9B-04 Parallel Lane:'));
   assert.ok(contract.includes('NOT MERGED'));
