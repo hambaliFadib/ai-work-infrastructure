@@ -10,6 +10,7 @@ Phase 5  Environment / Secret Contract      VERIFIED
 Phase 6  Generic Runtime / MCP              VERIFIED
 Phase 7  Oracle Safe Core                   VERIFIED
 Phase 8  Oracle Secure Read-Only            VERIFIED
+Phase 9A Context Hydration                  VERIFIED
 ```
 
 ## Repository Collaboration Baseline
@@ -31,10 +32,12 @@ RCB-07  VERIFIED
 ## Target work
 
 ```text
-Phase 9A  Context Hydration                  TARGET
 Phase 9B  Job Isolation + Parallelism        TARGET
 Phase 9C  Session Recovery                   TARGET
 ```
 
-Architecture Freeze v1 occurs only after Phase 9A–9C are VERIFIED. Bootstrap, clean-clone verification, and public release follow the freeze and remain TARGET. No Phase 9 implementation is claimed here.
+Phase 9A is VERIFIED.
+Phase 9B and Phase 9C remain TARGET.
+Architecture Freeze v1 remains blocked until 9A + 9B + 9C are all VERIFIED.
+Bootstrap, clean-clone verification, and public release follow the freeze and remain TARGET.
 

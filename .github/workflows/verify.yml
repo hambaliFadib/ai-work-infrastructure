@@ -84,3 +84,20 @@ jobs:
           grep -Fq 'TARGET' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq 'Phase 9B' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq 'Phase 9C' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Eq 'Context Hydration.*VERIFIED' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'context-hydration@1.0.1' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq '37/37' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Eq 'Phase 9B.*TARGET' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Eq 'Phase 9C.*TARGET' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Eq 'Phase 9A.*VERIFIED' docs/BUILD-PLAN.md
+          grep -Eq 'Phase 9B.*TARGET' docs/BUILD-PLAN.md
+          grep -Eq 'Phase 9C.*TARGET' docs/BUILD-PLAN.md
+          if grep -Eq 'Phase 9A.*TARGET' docs/BUILD-PLAN.md; then echo 'stale Phase 9A TARGET state in docs/BUILD-PLAN.md'; exit 1; fi
+          grep -Fq 'Phase 9A is VERIFIED' docs/WORKFLOW.md
+          if grep -Fq 'RCB-06 branch rules and RCB-07 project metadata are pending' docs/WORKFLOW.md; then echo 'stale RCB pending claim in docs/WORKFLOW.md'; exit 1; fi
+          if grep -Eq 'Phase 9A.*TARGET' docs/WORKFLOW.md; then echo 'stale Phase 9A TARGET state in docs/WORKFLOW.md'; exit 1; fi
+          grep -Fq 'Phase 9A' docs/governance/repository-collaboration.md
+          grep -Fq 'VERIFIED / CLOSED' docs/governance/repository-collaboration.md
+          grep -Fq 'Phase 9B' docs/governance/repository-collaboration.md
+          grep -Fq '#37' docs/governance/repository-collaboration.md
+          grep -Fq '#42' docs/governance/repository-collaboration.md
