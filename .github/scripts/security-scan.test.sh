@@ -4,7 +4,7 @@
 # Runs against temporary isolated Git repositories only. Never mutates the actual
 # repository. No network. No env/profile reads. No secret reads.
 #
-# Exit 0 only when all tests pass (6/6).
+# Exit 0 only when all tests pass (9/9).
 
 set -Eeuo pipefail
 
@@ -120,6 +120,49 @@ if [ "$sec06_ok" -eq 1 ]; then
   pass SEC06
 else
   fail SEC06 "content violation and/or prohibited filename did not fail independently"
+fi
+
+# SEC07 — subdirectory argument cannot hide prohibited root content
+repo="$WORK_ROOT/sec07"
+make_repo "$repo"
+marker="$(printf 'BEGIN %s PRIVATE KEY' 'OPENSSH')"
+track_file "$repo" "leak.txt" "$marker"
+track_file "$repo" "sub/safe.txt" "clean nested file"
+run_scanner "$repo/sub"
+if [ "$scanner_rc" -eq 0 ]; then
+  fail SEC07 "subdirectory argument hid prohibited root content"
+else
+  pass SEC07
+fi
+
+# SEC08 — default invocation from a subdirectory cannot hide a prohibited root filename
+repo="$WORK_ROOT/sec08"
+make_repo "$repo"
+track_file "$repo" ".env" "SYNTHETIC=placeholder-value"
+track_file "$repo" "sub/safe.txt" "clean nested file"
+scanner_out=""
+scanner_rc=0
+if scanner_out="$(cd "$repo/sub" && bash "$SCANNER" 2>&1)"; then
+  scanner_rc=0
+else
+  scanner_rc=$?
+fi
+if [ "$scanner_rc" -eq 0 ]; then
+  fail SEC08 "default invocation from a subdirectory hid a prohibited root filename"
+else
+  pass SEC08
+fi
+
+# SEC09 — clean subdirectory invocation normalizes to root and passes
+repo="$WORK_ROOT/sec09"
+make_repo "$repo"
+track_file "$repo" "root-safe.txt" "clean root file"
+track_file "$repo" "sub/nested-safe.txt" "clean nested file"
+run_scanner "$repo/sub"
+if [ "$scanner_rc" -eq 0 ]; then
+  pass SEC09
+else
+  fail SEC09 "clean subdirectory invocation failed after root normalization: $scanner_out"
 fi
 
 echo ''

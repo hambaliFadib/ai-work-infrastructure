@@ -6,7 +6,9 @@
 #   exit != 0 = prohibited state found OR any scanner rule could not execute reliably
 #
 # Usage: bash .github/scripts/security-scan.sh [repo-dir]
-#   repo-dir defaults to the current directory.
+#   repo-dir defaults to the current directory. It may be the repository root
+#   or any directory inside the worktree; the owning worktree top level is
+#   resolved with `git rev-parse --show-toplevel` and all rules execute there.
 #
 # No network. No env/profile reads. No secret reads. No repository mutation.
 # Uses explicit result handling only; never relies on shell `!` negation.
@@ -20,8 +22,25 @@ if ! cd "$REPO_DIR" 2>/dev/null; then
   exit 2
 fi
 
-if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then
-  echo "security-scan: not a git work tree: $REPO_DIR" >&2
+# Resolve the owning worktree top level. The requested directory may be the
+# repository root or any directory inside the worktree; scans must always
+# evaluate the entire owning worktree.
+if repo_root="$(git rev-parse --show-toplevel 2>&1)"; then
+  true
+else
+  root_rc=$?
+  printf '%s\n' "$repo_root" >&2
+  echo "security-scan: failed to resolve repository root with rc=$root_rc" >&2
+  exit "$root_rc"
+fi
+
+if [ -z "$repo_root" ]; then
+  echo "security-scan: empty repository root" >&2
+  exit 2
+fi
+
+if ! cd "$repo_root" 2>/dev/null; then
+  echo "security-scan: cannot enter repository root: $repo_root" >&2
   exit 2
 fi
 
