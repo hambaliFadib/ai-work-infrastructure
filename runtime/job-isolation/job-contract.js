@@ -37,7 +37,9 @@
  *       7. job identity / collision / foreign-job boundary
  *
  * All error identifiers are the locked canonical set from the policy; the
- * JobIsolationError constructor rejects any non-canonical code.
+ * JobIsolationError constructor rejects any non-canonical code. Module
+ * integrity failures use JobIsolationPolicyError (name/message only, no
+ * domain code outside the locked 18).
  */
 
 const {
@@ -58,16 +60,16 @@ const {
 const REQUIRED_FIELDS = (() => {
   const fields = POLICY.job_contract && POLICY.job_contract.required_fields;
   if (!Array.isArray(fields) || fields.length !== 8 || fields.some((f) => typeof f !== 'string')) {
-    throw new JobIsolationPolicyError('POLICY_MISMATCH', 'job_contract.required_fields must be the locked 8 fields');
+    throw new JobIsolationPolicyError('job_contract.required_fields must be the locked 8 fields');
   }
   for (const field of ['job_id', 'profile', 'knowledge_scope', 'execution_permissions']) {
     if (!fields.includes(field)) {
-      throw new JobIsolationPolicyError('POLICY_MISMATCH', `job_contract.required_fields missing: ${field}`);
+      throw new JobIsolationPolicyError(`job_contract.required_fields missing: ${field}`);
     }
   }
   for (const field of CONTRACT_NAMESPACE_FIELDS) {
     if (!fields.includes(field)) {
-      throw new JobIsolationPolicyError('POLICY_MISMATCH', `job_contract.required_fields missing: ${field}`);
+      throw new JobIsolationPolicyError(`job_contract.required_fields missing: ${field}`);
     }
   }
   return Object.freeze(fields.slice());
@@ -85,7 +87,7 @@ const CREATION_INPUT_FIELDS = Object.freeze([
 const KNOWLEDGE_SCOPES = (() => {
   const scopes = POLICY.knowledge_scope && POLICY.knowledge_scope.canonical_order;
   if (!Array.isArray(scopes) || scopes.length !== 3 || !scopes.includes('JOB_LOCAL')) {
-    throw new JobIsolationPolicyError('POLICY_MISMATCH', 'knowledge_scope.canonical_order malformed');
+    throw new JobIsolationPolicyError('knowledge_scope.canonical_order malformed');
   }
   return Object.freeze(scopes.slice());
 })();
@@ -94,7 +96,7 @@ const KNOWLEDGE_SCOPES = (() => {
 const EXECUTION_PERMISSIONS = (() => {
   const permissions = POLICY.execution_permissions && POLICY.execution_permissions.canonical_order;
   if (!Array.isArray(permissions) || permissions.length !== 5 || !permissions.includes('READ_ONLY')) {
-    throw new JobIsolationPolicyError('POLICY_MISMATCH', 'execution_permissions.canonical_order malformed');
+    throw new JobIsolationPolicyError('execution_permissions.canonical_order malformed');
   }
   return Object.freeze(permissions.slice());
 })();
@@ -222,7 +224,8 @@ function buildJobContract(fields) {
  * The four stored namespace fields are derived by the runtime; any caller
  * attempt to supply a derived namespace fails closed with
  * NAMESPACE_OVERRIDE_FORBIDDEN, and unknown unrelated input fails closed with
- * JOB_CONTRACT_INVALID.
+ * JOB_CONTRACT_INVALID. Schema closure is strict: every own key (enumerable,
+ * non-enumerable, or symbol) is inspected.
  *
  * CREATE is explicit: an existing active canonical job_id in the supplied
  * persisted set always collides (JOB_ID_COLLISION), even when the input is
@@ -238,21 +241,24 @@ function createJobContract(input, persistedContracts) {
   if (!isPlainObject(input)) {
     throw new JobIsolationError('JOB_CONTRACT_INVALID', 'Creation input must be a plain object');
   }
-  // Derived namespace fields are runtime-owned; caller supply is an override.
-  for (const field of NAMESPACE_FIELDS) {
-    if (Object.prototype.hasOwnProperty.call(input, field)) {
-      throw new JobIsolationError('NAMESPACE_OVERRIDE_FORBIDDEN', `Caller-supplied derived namespace: ${field}`);
+  // Strict own-key closure: every own key — enumerable, non-enumerable, or
+  // symbol — is inspected. Derived namespace fields are runtime-owned; any
+  // caller supply is an override attempt.
+  const ownKeys = Reflect.ownKeys(input);
+  for (const key of ownKeys) {
+    if (typeof key === 'string' && NAMESPACE_FIELDS.includes(key)) {
+      throw new JobIsolationError('NAMESPACE_OVERRIDE_FORBIDDEN', `Caller-supplied derived namespace: ${key}`);
     }
   }
-  // Unknown unrelated creation input fails closed.
-  for (const key of Object.keys(input)) {
-    if (!CREATION_INPUT_FIELDS.includes(key)) {
-      throw new JobIsolationError('JOB_CONTRACT_INVALID', `Unknown creation input field: ${key}`);
+  // Unknown unrelated creation input (including symbol own keys) fails closed.
+  for (const key of ownKeys) {
+    if (typeof key !== 'string' || !CREATION_INPUT_FIELDS.includes(key)) {
+      throw new JobIsolationError('JOB_CONTRACT_INVALID', `Unknown creation input field: ${String(key)}`);
     }
   }
   // Required creation input.
   for (const field of CREATION_INPUT_FIELDS) {
-    if (!Object.prototype.hasOwnProperty.call(input, field)) {
+    if (!ownKeys.includes(field)) {
       throw new JobIsolationError('JOB_CONTRACT_INVALID', `Missing required creation input: ${field}`);
     }
   }
@@ -283,8 +289,10 @@ function createJobContract(input, persistedContracts) {
 }
 
 /**
- * Validate a persisted JobContract. Exactly the locked eight fields are
- * accepted; unknown fields fail closed with JOB_CONTRACT_INVALID.
+ * Validate a persisted JobContract. Schema closure is strict: the own keys
+ * (Reflect.ownKeys — enumerable, non-enumerable, and symbol keys included)
+ * must equal exactly the locked eight string fields; anything else fails
+ * closed with JOB_CONTRACT_INVALID.
  *
  * The persisted identity must already be canonical (no silent repair), the
  * profile must be in canonical bound form, the four namespace fields must
@@ -296,17 +304,23 @@ function createJobContract(input, persistedContracts) {
  * persisted contract.
  */
 function validateJobContract(contract) {
-  // 1. structural JobContract validity
+  // 1. structural JobContract validity — strict own-key schema closure
   if (!isPlainObject(contract)) {
     throw new JobIsolationError('JOB_CONTRACT_INVALID', 'JobContract must be a plain object');
   }
-  for (const key of Object.keys(contract)) {
+  const ownKeys = Reflect.ownKeys(contract);
+  for (const key of ownKeys) {
+    if (typeof key !== 'string') {
+      throw new JobIsolationError('JOB_CONTRACT_INVALID', 'JobContract must not contain symbol own properties');
+    }
+  }
+  for (const key of ownKeys) {
     if (!REQUIRED_FIELDS.includes(key)) {
       throw new JobIsolationError('JOB_CONTRACT_INVALID', `Unknown JobContract field: ${key}`);
     }
   }
   for (const field of REQUIRED_FIELDS) {
-    if (!Object.prototype.hasOwnProperty.call(contract, field)) {
+    if (!ownKeys.includes(field)) {
       throw new JobIsolationError('JOB_CONTRACT_INVALID', `Missing required JobContract field: ${field}`);
     }
   }
@@ -409,24 +423,48 @@ function assertProfileBinding(contract, profile) {
 }
 
 /**
- * Retrieve the job-bound execution-permission ceiling, only when the active
- * canonical job_id matches the owning JobContract. A foreign active job fails
- * closed with FOREIGN_JOB_REJECT; a malformed active identity fails closed
- * with INVALID_JOB_ID.
+ * Retrieve the job-bound execution-permission ceiling for the active job.
+ *
+ * Trust boundary: the ceiling is ALWAYS taken from the persisted canonical
+ * active JobContract in `persistedContracts` (a Map keyed by canonical
+ * job_id) — never from a caller-supplied clone. The candidate contract is
+ * accepted only as proof of identity: it must be a canonical JobContract
+ * whose job_id equals the active canonical job id and which matches the
+ * persisted active contract exactly. Failure semantics:
+ *   - malformed candidate: structural/canonical JobContract errors
+ *   - malformed active identity: INVALID_JOB_ID
+ *   - foreign active job: FOREIGN_JOB_REJECT
+ *   - missing persisted active contract: JOB_CONTRACT_INVALID (fail closed)
+ *   - profile mismatch: PROFILE_BINDING_MISMATCH
+ *   - any other immutable difference (forged elevation): JOB_ID_COLLISION
  *
  * Returns a frozen copy bound to the job. The returned value is a capability
  * ceiling representation only: it authorizes nothing and approves nothing.
  * The approval gate and safe mode remain authoritative.
  */
-function bindPermissionCeiling(contract, activeJobId) {
-  const canonical = validateJobContract(contract);
+function bindPermissionCeiling(candidate, activeJobId, persistedContracts) {
+  if (!(persistedContracts instanceof Map)) {
+    throw new JobIsolationError('JOB_CONTRACT_INVALID', 'persistedContracts must be a Map keyed by canonical job_id');
+  }
+  const candidateCanonical = validateJobContract(candidate);
   const activeCanonical = canonicalizeJobId(activeJobId);
-  if (activeCanonical !== canonical.job_id) {
+  if (activeCanonical !== candidateCanonical.job_id) {
     throw new JobIsolationError('FOREIGN_JOB_REJECT', 'Active job id does not own this JobContract');
   }
+  const persisted = persistedContracts.get(activeCanonical);
+  if (persisted === undefined) {
+    throw new JobIsolationError('JOB_CONTRACT_INVALID', 'No persisted active canonical JobContract for the active job id');
+  }
+  const persistedCanonical = validateJobContract(persisted);
+  if (persistedCanonical.profile !== candidateCanonical.profile) {
+    throw new JobIsolationError('PROFILE_BINDING_MISMATCH', 'Candidate profile does not match the persisted binding');
+  }
+  if (!contractsEqual(persistedCanonical, candidateCanonical)) {
+    throw new JobIsolationError('JOB_ID_COLLISION', 'Candidate differs from the persisted active contract');
+  }
   return Object.freeze({
-    job_id: canonical.job_id,
-    execution_permissions: Object.freeze(canonical.execution_permissions.slice()),
+    job_id: persistedCanonical.job_id,
+    execution_permissions: Object.freeze(persistedCanonical.execution_permissions.slice()),
   });
 }
 

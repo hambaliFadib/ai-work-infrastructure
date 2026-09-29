@@ -1,5 +1,5 @@
 /**
- * Job Isolation v1 — JobContract Runtime Core tests (JCC01-JCC27).
+ * Job Isolation v1 — JobContract Runtime Core tests (JCC01-JCC32).
  *
  * Validates the deterministic JobContract runtime semantics against the
  * locked governance artifacts:
@@ -20,6 +20,7 @@ const assert = require('assert');
 
 const {
   JobIsolationError,
+  JobIsolationPolicyError,
   validateJobContract,
   createJobContract,
   reuseJobContract,
@@ -328,19 +329,21 @@ test('JCC22', () => {
 
 // JCC23 — job-bound permission ceiling: only the owning canonical job may bind
 test('JCC23', () => {
-  const { contract } = createdAndPersisted('jcc23.core', { execution_permissions: ['READ_ONLY', 'DELETE'] });
-  const ceiling = bindPermissionCeiling(contract, 'jcc23.core');
+  const { contract, store } = createdAndPersisted('jcc23.core', { execution_permissions: ['READ_ONLY', 'DELETE'] });
+  const ceiling = bindPermissionCeiling(contract, 'jcc23.core', store);
   assert.deepStrictEqual(ceiling, { job_id: 'jcc23.core', execution_permissions: ['READ_ONLY', 'DELETE'] });
   assert.ok(Object.isFrozen(ceiling));
   assert.ok(Object.isFrozen(ceiling.execution_permissions));
   for (const value of Object.values(ceiling)) {
     assert.notStrictEqual(typeof value, 'function', 'the ceiling must not expose executable behavior');
   }
-  assert.deepStrictEqual(bindPermissionCeiling(contract, '  JCC23.Core  ').job_id, 'jcc23.core');
-  expectCode(() => bindPermissionCeiling(contract, 'foreign-job'), 'FOREIGN_JOB_REJECT');
-  expectCode(() => bindPermissionCeiling(contract, 'jcc23.core.other'), 'FOREIGN_JOB_REJECT');
-  expectCode(() => bindPermissionCeiling(contract, 'bad/id'), 'INVALID_JOB_ID');
-  expectCode(() => bindPermissionCeiling(contract, 42), 'INVALID_JOB_ID');
+  assert.deepStrictEqual(bindPermissionCeiling(contract, '  JCC23.Core  ', store).job_id, 'jcc23.core');
+  expectCode(() => bindPermissionCeiling(contract, 'foreign-job', store), 'FOREIGN_JOB_REJECT');
+  expectCode(() => bindPermissionCeiling(contract, 'jcc23.core.other', store), 'FOREIGN_JOB_REJECT');
+  expectCode(() => bindPermissionCeiling(contract, 'bad/id', store), 'INVALID_JOB_ID');
+  expectCode(() => bindPermissionCeiling(contract, 42, store), 'INVALID_JOB_ID');
+  expectCode(() => bindPermissionCeiling(contract, 'jcc23.core', new Map()), 'JOB_CONTRACT_INVALID');
+  expectCode(() => bindPermissionCeiling(contract, 'jcc23.core', undefined), 'JOB_CONTRACT_INVALID');
 });
 
 // JCC24 — caller mutation cannot mutate the JobContract
@@ -355,7 +358,7 @@ test('JCC24', () => {
   try { contract.execution_permissions.push('DELETE'); } catch (e) { pushRejected = true; }
   assert.strictEqual(pushRejected, true);
   assert.deepStrictEqual(contract.execution_permissions, ['READ_ONLY']);
-  const ceiling = bindPermissionCeiling(contract, contract.job_id);
+  const ceiling = bindPermissionCeiling(contract, contract.job_id, store);
   try { ceiling.execution_permissions.push('DELETE'); } catch (e) { /* frozen */ }
   assert.deepStrictEqual(contract.execution_permissions, ['READ_ONLY']);
   assert.deepStrictEqual(ceiling.execution_permissions, ['READ_ONLY']);
@@ -383,7 +386,7 @@ test('JCC25', () => {
     [() => reuseJobContract({ ...contract, profile: 'OtherProfile' }, store), 'PROFILE_BINDING_MISMATCH'],
     [() => reuseJobContract({ ...contract, knowledge_scope: ['JOB_LOCAL', 'GLOBAL'] }, store), 'JOB_ID_COLLISION'],
     [() => reuseJobContract(contract, new Map()), 'JOB_CONTRACT_INVALID'],
-    [() => bindPermissionCeiling(contract, 'foreign-job'), 'FOREIGN_JOB_REJECT'],
+    [() => bindPermissionCeiling(contract, 'foreign-job', store), 'FOREIGN_JOB_REJECT'],
   ];
   for (const [fn, expected] of cases) {
     const err = expectCode(fn, expected);
@@ -444,6 +447,81 @@ test('JCC27', () => {
     assert.strictEqual(JSON.stringify(reuseJobContract(contract, store)), firstReuse);
     assert.strictEqual(JSON.stringify(validateJobContract(contract)), JSON.stringify(contract));
   }
+});
+
+// JCC28 — forged elevation rejected: ceiling binds to persisted truth
+test('JCC28', () => {
+  const { contract, store } = createdAndPersisted('jcc28.core', { execution_permissions: ['READ_ONLY'] });
+  const forged = { ...contract, execution_permissions: ['READ_ONLY', 'DELETE'] };
+  expectCode(() => bindPermissionCeiling(forged, 'jcc28.core', store), 'JOB_ID_COLLISION');
+  expectCode(() => bindPermissionCeiling({ ...contract, profile: 'ElevatedProfile' }, 'jcc28.core', store), 'PROFILE_BINDING_MISMATCH');
+  expectCode(() => bindPermissionCeiling({ ...contract, session_namespace: 'job:jcc28.core:evil' }, 'jcc28.core', store), 'NAMESPACE_OVERRIDE_FORBIDDEN');
+  assert.deepStrictEqual(store.get('jcc28.core').execution_permissions, ['READ_ONLY']);
+  assert.deepStrictEqual(bindPermissionCeiling(contract, 'jcc28.core', store).execution_permissions, ['READ_ONLY']);
+});
+
+// JCC29 — binding fails closed on missing/corrupt persisted truth and foreign jobs
+test('JCC29', () => {
+  const { contract, store } = createdAndPersisted('jcc29.core');
+  const other = createJobContract(creationInput('jcc29.other'), new Map());
+  const bothStore = new Map([['jcc29.core', contract], ['jcc29.other', other]]);
+  expectCode(() => bindPermissionCeiling(other, 'jcc29.core', bothStore), 'FOREIGN_JOB_REJECT');
+  expectCode(() => bindPermissionCeiling(contract, 'jcc29.core', new Map()), 'JOB_CONTRACT_INVALID');
+  expectCode(() => bindPermissionCeiling(contract, 'jcc29.core', {}), 'JOB_CONTRACT_INVALID');
+  const corruptStore = new Map([['jcc29.core', { ...contract, ledger_namespace: 'job:foreign:ledger' }]]);
+  expectCode(() => bindPermissionCeiling(contract, 'jcc29.core', corruptStore), 'NAMESPACE_OVERRIDE_FORBIDDEN');
+  const unknownFieldStore = new Map([['jcc29.core', { ...contract, bogus: 1 }]]);
+  expectCode(() => bindPermissionCeiling(contract, 'jcc29.core', unknownFieldStore), 'JOB_CONTRACT_INVALID');
+  expectCode(() => bindPermissionCeiling({ ...contract, extra: 1 }, 'jcc29.core', store), 'JOB_CONTRACT_INVALID');
+});
+
+// JCC30 — returned ceiling is a frozen copy from persisted truth
+test('JCC30', () => {
+  const { contract, store } = createdAndPersisted('jcc30.core', { execution_permissions: ['READ_ONLY'] });
+  const looseCandidate = JSON.parse(JSON.stringify(contract));
+  const ceiling = bindPermissionCeiling(looseCandidate, 'jcc30.core', store);
+  assert.deepStrictEqual(ceiling, { job_id: 'jcc30.core', execution_permissions: ['READ_ONLY'] });
+  assert.ok(Object.isFrozen(ceiling));
+  assert.ok(Object.isFrozen(ceiling.execution_permissions));
+  let pushRejected = false;
+  try { ceiling.execution_permissions.push('DELETE'); } catch (e) { pushRejected = true; }
+  assert.strictEqual(pushRejected, true);
+  try { ceiling.job_id = 'other'; } catch (e) { /* frozen */ }
+  assert.strictEqual(ceiling.job_id, 'jcc30.core');
+  looseCandidate.execution_permissions.push('DELETE');
+  assert.deepStrictEqual(ceiling.execution_permissions, ['READ_ONLY']);
+  assert.deepStrictEqual(store.get('jcc30.core').execution_permissions, ['READ_ONLY']);
+  assert.deepStrictEqual(contract.execution_permissions, ['READ_ONLY']);
+});
+
+// JCC31 — strict own-key schema closure: non-enumerable and symbol keys rejected
+test('JCC31', () => {
+  const { contract } = createdAndPersisted('jcc31.core');
+  expectCode(() => validateJobContract({ ...contract, extra: 1 }), 'JOB_CONTRACT_INVALID');
+  const nonEnumerable = { ...contract };
+  Object.defineProperty(nonEnumerable, 'hidden', { value: 1, enumerable: false, configurable: true });
+  expectCode(() => validateJobContract(nonEnumerable), 'JOB_CONTRACT_INVALID');
+  expectCode(() => validateJobContract({ ...contract, [Symbol('hidden')]: 1 }), 'JOB_CONTRACT_INVALID');
+  expectCode(() => createJobContract({ ...creationInput('jcc31'), extra: 1 }, new Map()), 'JOB_CONTRACT_INVALID');
+  const nonEnumerableInput = creationInput('jcc31');
+  Object.defineProperty(nonEnumerableInput, 'hidden', { value: 1, enumerable: false, configurable: true });
+  expectCode(() => createJobContract(nonEnumerableInput, new Map()), 'JOB_CONTRACT_INVALID');
+  expectCode(() => createJobContract({ ...creationInput('jcc31'), [Symbol('hidden')]: 1 }, new Map()), 'JOB_CONTRACT_INVALID');
+  assert.deepStrictEqual(validateJobContract(contract), contract);
+});
+
+// JCC32 — canonical domain error surface: exactly the locked 18 identifiers
+test('JCC32', () => {
+  assert.strictEqual(LOCKED_ERRORS.length, 18);
+  for (const candidateCode of ['POLICY_UNAVAILABLE', 'POLICY_MISMATCH']) {
+    let rejected = false;
+    try { new JobIsolationError(candidateCode, 'x'); } catch (e) { rejected = true; }
+    assert.strictEqual(rejected, true, `${candidateCode} must not be constructible as a domain error code`);
+  }
+  const policyError = new JobIsolationPolicyError('policy integrity failure');
+  assert.strictEqual(policyError.name, 'JobIsolationPolicyError');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(policyError, 'code'), false);
+  assert.strictEqual(policyError.code, undefined);
 });
 
 console.log('');

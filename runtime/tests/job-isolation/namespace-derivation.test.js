@@ -1,5 +1,5 @@
 /**
- * Job Isolation v1 — Namespace Derivation tests (NDC01-NDC10).
+ * Job Isolation v1 — Namespace Derivation tests (NDC01-NDC12).
  *
  * Validates the deterministic namespace derivation primitives against the
  * locked governance artifacts:
@@ -20,6 +20,7 @@ const assert = require('assert');
 
 const {
   JobIsolationError,
+  JobIsolationPolicyError,
   POLICY,
   NAMESPACE_FIELDS,
   CONTRACT_NAMESPACE_FIELDS,
@@ -229,6 +230,52 @@ test('NDC10', () => {
   };
   for (let i = 0; i < 100; i += 1) {
     assert.strictEqual(assertNamespaceIntegrity(input, exact), true);
+  }
+});
+
+// NDC11 — loaded policy data is recursively immutable
+test('NDC11', () => {
+  assert.ok(Object.isFrozen(POLICY));
+  assert.ok(Object.isFrozen(POLICY.job_id));
+  assert.ok(Object.isFrozen(POLICY.namespaces));
+  assert.ok(Object.isFrozen(POLICY.namespaces.templates));
+  assert.ok(Object.isFrozen(POLICY.canonical_errors));
+  assert.ok(Object.isFrozen(POLICY.knowledge_scope));
+  assert.ok(Object.isFrozen(POLICY.knowledge_scope.canonical_order));
+  assert.ok(Object.isFrozen(POLICY.execution_permissions));
+  assert.ok(Object.isFrozen(POLICY.execution_permissions.canonical_order));
+  const before = JSON.stringify(deriveNamespaces('ndc11.freeze'));
+  try { POLICY.namespaces.templates.session = 'job:{job_id}:evil'; } catch (e) { /* frozen */ }
+  try { POLICY.namespaces.templates.session = 'job:{job_id}:evil'; } catch (e) { /* frozen */ }
+  try { POLICY.canonical_errors.push('FAKE_CODE'); } catch (e) { /* frozen */ }
+  try { POLICY.canonical_errors[0] = 'FAKE_CODE'; } catch (e) { /* frozen */ }
+  try { POLICY.knowledge_scope.canonical_order[0] = 'GLOBAL'; } catch (e) { /* frozen */ }
+  try { POLICY.execution_permissions.canonical_order.push('SUPER_USER'); } catch (e) { /* frozen */ }
+  assert.strictEqual(POLICY.namespaces.templates.session, 'job:{job_id}:sessions');
+  assert.strictEqual(POLICY.canonical_errors.length, 18);
+  assert.deepStrictEqual(POLICY.knowledge_scope.canonical_order, ['JOB_LOCAL', 'SESSION_LOCAL', 'GLOBAL']);
+  assert.deepStrictEqual(POLICY.execution_permissions.canonical_order, ['READ_ONLY', 'LOW_RISK_WRITE', 'CONFIG_WRITE', 'DELETE', 'SECRET_ACCESS']);
+  assert.strictEqual(deriveNamespaces('ndc11.freeze').session_namespace, 'job:ndc11.freeze:sessions');
+  assert.strictEqual(JSON.stringify(deriveNamespaces('ndc11.freeze')), before);
+});
+
+// NDC12 — policy integrity errors expose no ungoverned domain codes
+test('NDC12', () => {
+  const err = new JobIsolationPolicyError('policy unavailable');
+  assert.strictEqual(err.name, 'JobIsolationPolicyError');
+  assert.strictEqual(typeof err.message, 'string');
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(err, 'code'), false);
+  assert.strictEqual(err.code, undefined);
+  assert.strictEqual(POLICY.canonical_errors.length, 18);
+  for (const candidateCode of ['POLICY_UNAVAILABLE', 'POLICY_MISMATCH']) {
+    let rejected = false;
+    try { new JobIsolationError(candidateCode, 'x'); } catch (e) { rejected = true; }
+    assert.strictEqual(rejected, true, `${candidateCode} must not be constructible as a domain error code`);
+  }
+  for (const rel of ['runtime/job-isolation/namespace-derivation.js', 'runtime/job-isolation/job-contract.js']) {
+    const source = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    assert.ok(!source.includes('POLICY_UNAVAILABLE'), `${rel} must not reference POLICY_UNAVAILABLE`);
+    assert.ok(!source.includes('POLICY_MISMATCH'), `${rel} must not reference POLICY_MISMATCH`);
   }
 });
 

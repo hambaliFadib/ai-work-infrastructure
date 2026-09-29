@@ -28,8 +28,10 @@
  *
  * Error identifiers are the locked canonical set from the policy. Module
  * integrity failures (policy unavailable / mismatched / malformed) throw
- * JobIsolationPolicyError; every validation outcome throws JobIsolationError,
- * whose constructor rejects any code outside the locked canonical set.
+ * JobIsolationPolicyError with name/message only — it exposes no domain code,
+ * because the locked domain error vocabulary is exactly the 18 canonical
+ * identifiers. Every validation outcome throws JobIsolationError, whose
+ * constructor rejects any code outside that locked set.
  */
 
 const fs = require('fs');
@@ -70,57 +72,78 @@ const POLICY_TEMPLATE_KEYS = Object.freeze({
  */
 const NAMESPACE_SUFFIX_PATTERN = /^[a-z][a-z0-9-]*$/;
 
+/**
+ * Module-integrity failure (policy unavailable / mismatched / malformed).
+ * This is NOT a Job Isolation domain validation outcome: it deliberately
+ * exposes no `code` property, because the locked domain error vocabulary is
+ * exactly the 18 canonical identifiers and initialization failures must not
+ * extend it.
+ */
 class JobIsolationPolicyError extends Error {
-  constructor(code, message) {
+  constructor(message) {
     super(message);
     this.name = 'JobIsolationPolicyError';
-    this.code = code;
   }
 }
 
-function policyFailure(code, message) {
-  throw new JobIsolationPolicyError(code, message);
+function policyFailure(message) {
+  throw new JobIsolationPolicyError(message);
 }
 
 /**
- * Locked machine policy. Fail closed if unavailable, mismatched, or missing
- * the constants this module derives from.
+ * Recursively freeze a JSON-derived value so loaded policy data can never be
+ * mutated by any consumer after initialization.
+ */
+function deepFreeze(value) {
+  if (value === null || typeof value !== 'object') return value;
+  for (const key of Reflect.ownKeys(value)) {
+    deepFreeze(value[key]);
+  }
+  return Object.freeze(value);
+}
+
+/**
+ * Locked machine policy, recursively frozen before any use or export.
+ * Derivation reads only this immutable snapshot, so no consumer can mutate
+ * policy data and change derivation output or persisted-contract validation.
+ * Fail closed if unavailable, mismatched, or missing the constants this
+ * module derives from.
  */
 const POLICY = (() => {
   let parsed;
   try {
     parsed = JSON.parse(fs.readFileSync(POLICY_PATH, 'utf8'));
   } catch (e) {
-    policyFailure('POLICY_UNAVAILABLE', `Cannot load ${POLICY_REF} policy: ${e.message}`);
+    policyFailure(`Cannot load ${POLICY_REF} policy: ${e.message}`);
   }
   if (parsed.policy_ref !== POLICY_REF) {
-    policyFailure('POLICY_MISMATCH', `Expected policy ${POLICY_REF}, found ${parsed.policy_ref}`);
+    policyFailure(`Expected policy ${POLICY_REF}, found ${parsed.policy_ref}`);
   }
   if (!Array.isArray(parsed.canonical_errors) || parsed.canonical_errors.length !== 18) {
-    policyFailure('POLICY_MISMATCH', 'canonical_errors must be the locked 18 identifiers');
+    policyFailure('canonical_errors must be the locked 18 identifiers');
   }
   if (!parsed.job_id || typeof parsed.job_id.pattern !== 'string') {
-    policyFailure('POLICY_MISMATCH', 'job_id pattern missing');
+    policyFailure('job_id pattern missing');
   }
   const templates = parsed.namespaces && parsed.namespaces.templates;
   if (!templates || typeof templates !== 'object') {
-    policyFailure('POLICY_MISMATCH', 'namespaces.templates missing');
+    policyFailure('namespaces.templates missing');
   }
   for (const field of NAMESPACE_FIELDS) {
     const key = POLICY_TEMPLATE_KEYS[field];
     const template = templates[key];
     if (typeof template !== 'string') {
-      policyFailure('POLICY_MISMATCH', `namespace template missing: ${key}`);
+      policyFailure(`namespace template missing: ${key}`);
     }
     const prefix = 'job:{job_id}:';
     if (!template.startsWith(prefix) || template.split('{job_id}').length !== 2) {
-      policyFailure('POLICY_MISMATCH', `namespace template malformed: ${key}`);
+      policyFailure(`namespace template malformed: ${key}`);
     }
     if (!NAMESPACE_SUFFIX_PATTERN.test(template.slice(prefix.length))) {
-      policyFailure('POLICY_MISMATCH', `namespace template suffix malformed: ${key}`);
+      policyFailure(`namespace template suffix malformed: ${key}`);
     }
   }
-  return parsed;
+  return deepFreeze(parsed);
 })();
 
 const CANONICAL_ERRORS = Object.freeze(POLICY.canonical_errors.slice());
