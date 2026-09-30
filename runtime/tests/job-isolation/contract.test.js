@@ -67,8 +67,8 @@ test('JIC01', () => {
   assert.strictEqual(policy.policy_ref, 'job-isolation@1.0.0');
   assert.strictEqual(policy.status, 'CONTRACT_LOCKED');
   assert.strictEqual(policy.implementation_status, 'PARTIAL');
-  assert.deepStrictEqual(policy.implementation_components.implemented, ['JOB_CONTRACT_RUNTIME_CORE', 'NAMESPACE_DERIVATION_PRIMITIVES', 'PARALLEL_LANE_SEMANTICS']);
-  assert.deepStrictEqual(policy.implementation_components.pending, ['NAMESPACE_ISOLATION_ENFORCEMENT', 'PARALLEL_LANE_MAIN_INTEGRATION', 'MAIN_COORDINATION_INTEGRATION', 'PHASE_9B_ACCEPTANCE']);
+  assert.deepStrictEqual(policy.implementation_components.implemented, ['JOB_CONTRACT_RUNTIME_CORE', 'NAMESPACE_DERIVATION_PRIMITIVES', 'PARALLEL_LANE_SEMANTICS', 'NAMESPACE_ISOLATION_ENFORCEMENT']);
+  assert.deepStrictEqual(policy.implementation_components.pending, ['PARALLEL_LANE_MAIN_INTEGRATION', 'MAIN_COORDINATION_INTEGRATION', 'PHASE_9B_ACCEPTANCE']);
 });
 
 // JIC02 — human contract status/policy parity
@@ -367,9 +367,9 @@ test('JIC33', () => {
   assert.ok(workflow.includes('JobContract Runtime Core'));
   assert.ok(!workflow.includes('Runtime implementation: NOT STARTED'));
   assert.ok(/#38\s+9B-02 JobContract Runtime Core\s+— CLOSED \/ VERIFIED/.test(collab));
-  assert.ok(/#39\s+9B-03 Namespace Isolation Enforcement\s+— status:ready/.test(collab));
+  assert.ok(/#39\s+9B-03 Namespace Isolation Enforcement\s+— CLOSED \/ VERIFIED/.test(collab));
   assert.ok(/#40\s+9B-04 Parallel Lane Semantics\s+— CLOSED \/ VERIFIED/.test(collab));
-  assert.ok(/#41\s+9B-05 Main Coordination Integration\s+— status:blocked/.test(collab));
+  assert.ok(/#41\s+9B-05 Main Coordination Integration\s+— status:ready/.test(collab));
   assert.ok(/#42\s+9B-06 Acceptance Closure\s+— status:blocked/.test(collab));
   assert.ok(collab.includes('CONTRACT_LOCKED / PARTIAL'));
   assert.ok(collab.includes('IN PROGRESS / PARTIAL'));
@@ -378,6 +378,16 @@ test('JIC33', () => {
   assert.ok(readme.includes('ParallelLane runtime semantics'));
   assert.ok(blueprint.includes('ParallelLane runtime semantics'));
   assert.ok(workflow.includes('ParallelLane runtime semantics'));
+  // 9B-03 namespace isolation enforcement parity (proposed post-merge truth)
+  assert.ok(policy.implementation_components.implemented.includes('NAMESPACE_ISOLATION_ENFORCEMENT'));
+  assert.ok(/9B-03 Namespace Isolation:\s*IMPLEMENTED \/ VERIFIED/.test(contract));
+  assert.ok(arch.includes('namespace isolation enforcement'));
+  assert.ok(arch.includes('knowledge-scope eligibility'));
+  assert.ok(readme.includes('namespace isolation enforcement'));
+  assert.ok(blueprint.includes('namespace isolation enforcement'));
+  assert.ok(workflow.includes('namespace isolation enforcement'));
+  assert.ok(contract.includes('Phase 9B'));
+  assert.ok(!contract.includes('PHASE 9B VERIFIED'));
   assert.ok(readme.includes('Phase 9B'));
   assert.ok(readme.includes('IN PROGRESS'));
   assert.ok(readme.includes('NOT VERIFIED'));

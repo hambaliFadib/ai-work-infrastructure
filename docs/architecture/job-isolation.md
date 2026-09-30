@@ -7,8 +7,9 @@ Phase: 9B
 Governance issue: #37 (9B-01)
 
 This document describes the architecture of Job Isolation v1 as locked by
-`governance/contracts/job-isolation-v1.md`. The JobContract core and namespace derivation
-primitives, and ParallelLane runtime semantics are implemented modules; remaining stages are conceptual.
+`governance/contracts/job-isolation-v1.md`. The JobContract core, namespace derivation
+primitives, ParallelLane runtime semantics, and namespace isolation enforcement (including
+knowledge-scope read eligibility) are implemented modules; remaining stages are conceptual.
 
 All flow descriptions below are:
 
@@ -117,13 +118,15 @@ Implemented:
 - JobContract Runtime Core (runtime/job-isolation/job-contract.js, 9B-02 / #38)
 - deterministic namespace derivation primitives (runtime/job-isolation/namespace-derivation.js, 9B-02 / #38)
 - ParallelLane runtime semantics (runtime/job-isolation/parallel-lane.js, 9B-04 / #40)
+- namespace isolation enforcement (runtime/job-isolation/namespace-isolation.js, 9B-03 / #39)
+- knowledge-scope eligibility enforcement (runtime/job-isolation/knowledge-scope.js, 9B-03 / #39)
 
 Pending:
-- namespace isolation enforcement (9B-03 / #39)
 - trusted/audited lane synchronization recognition (9B-05 / #41)
 - main coordination integration (9B-05 / #41)
 - Phase 9B acceptance (9B-06 / #42)
 
 ParallelLane semantics implemented is NOT the same as ParallelLane integrated into main
-coordination. Isolation enforcement is NOT implemented. Trusted/audited lane synchronization
-recognition is NOT implemented. Acceptance executions are declared for 9B-06 (#42) and are NOT VERIFIED.
+coordination. Namespace isolation enforcement is implemented as pure namespace/knowledge
+read-eligibility boundaries and is NOT integrated into main coordination. Trusted/audited lane
+synchronization recognition is NOT implemented. Acceptance executions are declared for 9B-06 (#42) and are NOT VERIFIED.

@@ -118,9 +118,9 @@ Implemented:
 - JobContract Runtime Core
 - deterministic namespace derivation primitives
 - ParallelLane runtime semantics
+- namespace isolation enforcement
 
 Pending:
-- namespace isolation enforcement
 - parallel-lane main-coordination integration
 - main coordination integration
 - Phase 9B acceptance
