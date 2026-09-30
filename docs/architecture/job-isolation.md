@@ -8,8 +8,9 @@ Governance issue: #37 (9B-01)
 
 This document describes the architecture of Job Isolation v1 as locked by
 `governance/contracts/job-isolation-v1.md`. The JobContract core, namespace derivation
-primitives, ParallelLane runtime semantics, and namespace isolation enforcement (including
-knowledge-scope read eligibility) are implemented modules; remaining stages are conceptual.
+primitives, ParallelLane runtime semantics, namespace isolation enforcement (including
+knowledge-scope read eligibility), and main coordination integration (including audited
+synchronization recognition) are implemented modules; remaining stages are conceptual.
 
 All flow descriptions below are:
 
@@ -120,13 +121,13 @@ Implemented:
 - ParallelLane runtime semantics (runtime/job-isolation/parallel-lane.js, 9B-04 / #40)
 - namespace isolation enforcement (runtime/job-isolation/namespace-isolation.js, 9B-03 / #39)
 - knowledge-scope eligibility enforcement (runtime/job-isolation/knowledge-scope.js, 9B-03 / #39)
+- main coordination integration (runtime/job-isolation/coordinator.js, 9B-05 / #41)
+- audited synchronization recognition (runtime/job-isolation/coordinator.js, 9B-05 / #41)
 
 Pending:
-- trusted/audited lane synchronization recognition (9B-05 / #41)
-- main coordination integration (9B-05 / #41)
 - Phase 9B acceptance (9B-06 / #42)
 
-ParallelLane semantics implemented is NOT the same as ParallelLane integrated into main
-coordination. Namespace isolation enforcement is implemented as pure namespace/knowledge
-read-eligibility boundaries and is NOT integrated into main coordination. Trusted/audited lane
-synchronization recognition is NOT implemented. Acceptance executions are declared for 9B-06 (#42) and are NOT VERIFIED.
+Main coordination integration is implemented as a pure composition layer over the existing
+runtime authorities; it introduces no behavioral change to JobContract, namespace derivation,
+namespace isolation, knowledge scope, or ParallelLane. Coordination integration implemented
+is NOT Phase 9B VERIFIED: acceptance executions are declared for 9B-06 (#42) and are NOT VERIFIED.

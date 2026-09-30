@@ -32,11 +32,11 @@ function test(label, fn) {
   }
 }
 
-// JIR01 — exact registry = 7, canonical order, all required
+// JIR01 — exact registry = 8, canonical order, all required
 test('JIR01', () => {
   assert.ok(Array.isArray(SUITE_REGISTRY));
-  assert.strictEqual(SUITE_REGISTRY.length, 7);
-  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'job-contract', 'namespace-derivation', 'parallel-lane', 'namespace-isolation', 'knowledge-scope']);
+  assert.strictEqual(SUITE_REGISTRY.length, 8);
+  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'job-contract', 'namespace-derivation', 'parallel-lane', 'namespace-isolation', 'knowledge-scope', 'integration']);
   for (const suite of SUITE_REGISTRY) {
     assert.strictEqual(suite.required, true, `${suite.name} must be required`);
   }
@@ -96,7 +96,7 @@ test('JIR07', () => {
 
 // JIR08 — deterministic execution order contract -> runner -> combined registry
 test('JIR08', () => {
-  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'job-contract', 'namespace-derivation', 'parallel-lane', 'namespace-isolation', 'knowledge-scope'], 'registry order must be deterministic');
+  assert.deepStrictEqual(SUITE_REGISTRY.map((s) => s.name), ['contract', 'runner', 'job-contract', 'namespace-derivation', 'parallel-lane', 'namespace-isolation', 'knowledge-scope', 'integration'], 'registry order must be deterministic');
   assert.ok(RUNNER_SOURCE.includes('for (const suite of registry)'), 'runner must iterate the registry sequentially');
   fs.mkdirSync(TMP_DIR, { recursive: true });
   const relativeDir = `tmp/runner-${process.pid}`;

@@ -22,6 +22,7 @@ const SUITE_REGISTRY = [
   { name: 'parallel-lane', file: 'parallel-lane.test.js', required: true },
   { name: 'namespace-isolation', file: 'namespace-isolation.test.js', required: true },
   { name: 'knowledge-scope', file: 'knowledge-scope.test.js', required: true },
+  { name: 'integration', file: 'integration.test.js', required: true },
 ];
 
 const DIR = __dirname;

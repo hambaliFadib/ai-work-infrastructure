@@ -119,10 +119,11 @@ Implemented:
 - deterministic namespace derivation primitives
 - ParallelLane runtime semantics
 - namespace isolation enforcement
+- ParallelLane main integration
+- Main Coordination Integration
+- audited synchronization recognition
 
 Pending:
-- parallel-lane main-coordination integration
-- main coordination integration
 - Phase 9B acceptance
 
 Phase 9B acceptance: NOT VERIFIED

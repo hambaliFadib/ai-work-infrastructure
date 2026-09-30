@@ -34,11 +34,12 @@ Implemented:
 - deterministic namespace derivation primitives
 - ParallelLane runtime semantics
 - namespace isolation enforcement
+- ParallelLane main integration
+- Main Coordination Integration
+- audited synchronization recognition
 
 Remaining:
-- parallel-lane main-coordination integration
-- main coordination integration
-- acceptance closure
+- Phase 9B acceptance closure
 
 ## Target architecture
 
