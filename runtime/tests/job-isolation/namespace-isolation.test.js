@@ -6,6 +6,10 @@
  *   - governance/contracts/job-isolation-v1.md (sections 10-14, 22)
  *   - governance/policies/job-isolation.json (job-isolation@1.0.0)
  *
+ * Session resource scopes are pinned explicitly: JOB_SCOPED (shared inside
+ * the owning job's session namespace) and SESSION_LOCAL (owner-session
+ * restricted); foreign-job rejection always outranks session equality.
+ *
  * Scope boundary: namespace access enforcement only. No JobContract behavior
  * changes, no namespace derivation changes, no parallel lanes (#40), no
  * coordinator (#41), no acceptance suite (#42), no Phase 9C recovery
@@ -30,6 +34,7 @@ const ns = require('../../job-isolation/namespace-isolation.js');
 const {
   ACCESS_OPERATIONS,
   CLEANUP_OPERATION,
+  SESSION_RESOURCE_SCOPES,
   evaluateSessionAccess,
   evaluateEvidenceAccess,
   evaluateLedgerAccess,
@@ -101,6 +106,7 @@ function sessionRequest(overrides) {
     operation: 'READ',
     resource_job_id: 'nis.job-a',
     resource_namespace: A_NS.session,
+    resource_scope: 'SESSION_LOCAL',
     requester_session_id: 'session-one',
     owner_session_id: 'session-one',
   }, overrides);
@@ -119,6 +125,7 @@ class CustomPrototypeRequest {
     this.operation = 'READ';
     this.resource_job_id = 'nis.job-a';
     this.resource_namespace = A_NS.session;
+    this.resource_scope = 'SESSION_LOCAL';
     this.requester_session_id = 'session-one';
     this.owner_session_id = 'session-one';
   }
@@ -130,7 +137,7 @@ class CustomPrototypeRequest {
 test('NIS01', () => {
   assert.deepStrictEqual(
     evaluateSessionAccess(A, sessionRequest({})),
-    { allowed: true, same_job: true, same_session: true }
+    { allowed: true, same_job: true, same_session: true, resource_scope: 'SESSION_LOCAL' }
   );
   assert.deepStrictEqual(
     evaluateEvidenceAccess(A, resourceRequest({ resource_namespace: A_NS.evidence })),
@@ -181,17 +188,19 @@ test('NIS02', () => {
   nullProto.operation = 'READ';
   nullProto.resource_job_id = 'nis.job-a';
   nullProto.resource_namespace = A_NS.session;
+  nullProto.resource_scope = 'SESSION_LOCAL';
   nullProto.requester_session_id = 'session-one';
   nullProto.owner_session_id = 'session-one';
   assert.deepStrictEqual(
     evaluateSessionAccess(A, nullProto),
-    { allowed: true, same_job: true, same_session: true }
+    { allowed: true, same_job: true, same_session: true, resource_scope: 'SESSION_LOCAL' }
   );
 });
 
 // NIS03 — hidden/unknown field rejection: extra enumerable fields, extra
-// non-enumerable fields, and missing fields all fail closed; known fields are
-// read as data properties regardless of enumerability.
+// non-enumerable fields, and missing fields (including a missing
+// resource_scope) all fail closed; known fields are read as data properties
+// regardless of enumerability.
 test('NIS03', () => {
   // extra enumerable key
   expectCode(() => evaluateSessionAccess(A, sessionRequest({ extra: 1 })), 'NAMESPACE_DERIVATION_FAILED');
@@ -203,6 +212,10 @@ test('NIS03', () => {
   const missing = sessionRequest({});
   delete missing.owner_session_id;
   expectCode(() => evaluateSessionAccess(A, missing), 'NAMESPACE_DERIVATION_FAILED');
+  // missing resource_scope
+  const missingScope = sessionRequest({});
+  delete missingScope.resource_scope;
+  expectCode(() => evaluateSessionAccess(A, missingScope), 'NAMESPACE_DERIVATION_FAILED');
   // resource boundary: extra key
   expectCode(() => evaluateEvidenceAccess(A, resourceRequest({ extra: 1 })), 'NAMESPACE_DERIVATION_FAILED');
 
@@ -211,12 +224,13 @@ test('NIS03', () => {
     operation: 'READ',
     resource_job_id: 'nis.job-a',
     resource_namespace: A_NS.session,
+    resource_scope: 'SESSION_LOCAL',
     requester_session_id: 'session-one',
   };
   Object.defineProperty(nonEnumKnown, 'owner_session_id', { value: 'session-one', enumerable: false });
   assert.deepStrictEqual(
     evaluateSessionAccess(A, nonEnumKnown),
-    { allowed: true, same_job: true, same_session: true }
+    { allowed: true, same_job: true, same_session: true, resource_scope: 'SESSION_LOCAL' }
   );
 });
 
@@ -244,6 +258,7 @@ test('NIS05', () => {
   inheritedProto.operation = 'READ';
   inheritedProto.resource_job_id = 'nis.job-a';
   inheritedProto.resource_namespace = A_NS.session;
+  inheritedProto.resource_scope = 'SESSION_LOCAL';
   inheritedProto.requester_session_id = 'session-one';
   inheritedProto.owner_session_id = 'session-one';
   expectCode(() => evaluateSessionAccess(A, inheritedProto), 'NAMESPACE_DERIVATION_FAILED');
@@ -260,6 +275,7 @@ test('NIS06', () => {
     operation: 'READ',
     resource_job_id: 'nis.job-a',
     resource_namespace: A_NS.session,
+    resource_scope: 'SESSION_LOCAL',
     requester_session_id: 'session-one',
   };
   Object.defineProperty(accessorRequest, 'owner_session_id', {
@@ -276,6 +292,7 @@ test('NIS06', () => {
     operation: 'READ',
     resource_job_id: 'nis.job-a',
     resource_namespace: A_NS.session,
+    resource_scope: 'SESSION_LOCAL',
     requester_session_id: 'session-one',
     owner_session_id: 'session-one',
   };
@@ -318,11 +335,25 @@ test('NIS07', () => {
   expectCode(() => evaluateRuntimeStateCleanup(A, resourceRequest({ operation: CLEANUP_OPERATION, resource_job_id: 'NIS.JOB-A', resource_namespace: A_NS.runtime })), 'INVALID_JOB_ID');
 });
 
-// NIS08 — same-job namespace mismatch -> NAMESPACE_COLLISION (never
-// NAMESPACE_OVERRIDE_FORBIDDEN); missing/empty/non-string namespace identity
-// fails closed as NAMESPACE_DERIVATION_FAILED.
+// NIS08 — session structural mapping: unknown/missing resource scope fails
+// closed with NAMESPACE_DERIVATION_FAILED; same-job namespace mismatch ->
+// NAMESPACE_COLLISION (never NAMESPACE_OVERRIDE_FORBIDDEN);
+// missing/empty/non-string namespace identity fails closed.
 test('NIS08', () => {
+  // unknown / non-canonical resource scope values
+  for (const badScope of ['GLOBAL', 'job_scoped', 'session_local', 'JOB_SCOPED ', ' JOB_SCOPED', '', 42, null, true]) {
+    expectCode(() => evaluateSessionAccess(A, sessionRequest({ resource_scope: badScope })), 'NAMESPACE_DERIVATION_FAILED');
+  }
+  // missing resource_scope (own-key closure)
+  const missingScope = sessionRequest({});
+  delete missingScope.resource_scope;
+  expectCode(() => evaluateSessionAccess(A, missingScope), 'NAMESPACE_DERIVATION_FAILED');
+  // scope enum is exactly the locked two
+  assert.deepStrictEqual(SESSION_RESOURCE_SCOPES, ['JOB_SCOPED', 'SESSION_LOCAL']);
+
+  // same-job namespace mismatch -> NAMESPACE_COLLISION for both resource scopes
   expectCode(() => evaluateSessionAccess(A, sessionRequest({ resource_namespace: B_NS.session })), 'NAMESPACE_COLLISION');
+  expectCode(() => evaluateSessionAccess(A, sessionRequest({ resource_scope: 'JOB_SCOPED', resource_namespace: B_NS.session })), 'NAMESPACE_COLLISION');
   expectCode(() => evaluateSessionAccess(A, sessionRequest({ resource_namespace: A_NS.evidence })), 'NAMESPACE_COLLISION');
   expectCode(() => evaluateEvidenceAccess(A, resourceRequest({ resource_namespace: A_NS.session })), 'NAMESPACE_COLLISION');
   expectCode(() => evaluateLedgerAccess(A, resourceRequest({ operation: 'WRITE', resource_namespace: B_NS.ledger })), 'NAMESPACE_COLLISION');
@@ -342,80 +373,109 @@ test('NIS08', () => {
   assert.notStrictEqual(observed, 'NAMESPACE_OVERRIDE_FORBIDDEN', 'resource access must not use NAMESPACE_OVERRIDE_FORBIDDEN');
 });
 
-// NIS09 — session matrix: same job + same session READ -> allowed.
+// NIS09 — JOB_SCOPED: same job + same session READ and WRITE are allowed.
 test('NIS09', () => {
-  const decision = evaluateSessionAccess(A, sessionRequest({ operation: 'READ' }));
-  assert.deepStrictEqual(decision, { allowed: true, same_job: true, same_session: true });
-  assert.ok(Object.isFrozen(decision));
+  const read = evaluateSessionAccess(A, sessionRequest({ resource_scope: 'JOB_SCOPED', operation: 'READ' }));
+  assert.deepStrictEqual(read, { allowed: true, same_job: true, same_session: true, resource_scope: 'JOB_SCOPED' });
+  assert.ok(Object.isFrozen(read));
+  const write = evaluateSessionAccess(A, sessionRequest({ resource_scope: 'JOB_SCOPED', operation: 'WRITE' }));
+  assert.deepStrictEqual(write, { allowed: true, same_job: true, same_session: true, resource_scope: 'JOB_SCOPED' });
+  assert.ok(Object.isFrozen(write));
 });
 
-// NIS10 — session matrix: same job + same session WRITE -> allowed.
+// NIS10 — JOB_SCOPED: same job + different session READ and WRITE are allowed
+// (job-scoped state is shared inside the owning job; session equality does
+// not restrict it).
 test('NIS10', () => {
-  const decision = evaluateSessionAccess(A, sessionRequest({ operation: 'WRITE' }));
-  assert.deepStrictEqual(decision, { allowed: true, same_job: true, same_session: true });
-  assert.ok(Object.isFrozen(decision));
+  const read = evaluateSessionAccess(A, sessionRequest({ resource_scope: 'JOB_SCOPED', operation: 'READ', owner_session_id: 'session-two' }));
+  assert.deepStrictEqual(read, { allowed: true, same_job: true, same_session: false, resource_scope: 'JOB_SCOPED' });
+  assert.ok(Object.isFrozen(read));
+  const write = evaluateSessionAccess(A, sessionRequest({ resource_scope: 'JOB_SCOPED', operation: 'WRITE', owner_session_id: 'session-two' }));
+  assert.deepStrictEqual(write, { allowed: true, same_job: true, same_session: false, resource_scope: 'JOB_SCOPED' });
+  assert.ok(Object.isFrozen(write));
+  assert.strictEqual(read.code, undefined, 'job-scoped allow exposes no domain .code');
 });
 
-// NIS11 — session matrix: same job + different session READ -> allowed=false
-// (frozen eligibility decision, not a thrown canonical exception).
+// NIS11 — SESSION_LOCAL: same job + same session READ and WRITE are allowed.
 test('NIS11', () => {
-  const decision = evaluateSessionAccess(A, sessionRequest({ operation: 'READ', owner_session_id: 'session-two' }));
-  assert.deepStrictEqual(decision, { allowed: false, same_job: true, same_session: false });
-  assert.ok(Object.isFrozen(decision));
-  assert.strictEqual(decision.code, undefined, 'ordinary denial exposes no domain .code');
+  const read = evaluateSessionAccess(A, sessionRequest({ operation: 'READ' }));
+  assert.deepStrictEqual(read, { allowed: true, same_job: true, same_session: true, resource_scope: 'SESSION_LOCAL' });
+  assert.ok(Object.isFrozen(read));
+  const write = evaluateSessionAccess(A, sessionRequest({ operation: 'WRITE' }));
+  assert.deepStrictEqual(write, { allowed: true, same_job: true, same_session: true, resource_scope: 'SESSION_LOCAL' });
+  assert.ok(Object.isFrozen(write));
 });
 
-// NIS12 — session matrix: same job + different session WRITE -> allowed=false.
+// NIS12 — SESSION_LOCAL: same job + different session READ and WRITE are
+// denied (frozen eligibility decision, not a thrown canonical exception).
 test('NIS12', () => {
-  const decision = evaluateSessionAccess(A, sessionRequest({ operation: 'WRITE', owner_session_id: 'session-two' }));
-  assert.deepStrictEqual(decision, { allowed: false, same_job: true, same_session: false });
-  assert.ok(Object.isFrozen(decision));
-  assert.strictEqual(decision.code, undefined);
+  const read = evaluateSessionAccess(A, sessionRequest({ operation: 'READ', owner_session_id: 'session-two' }));
+  assert.deepStrictEqual(read, { allowed: false, same_job: true, same_session: false, resource_scope: 'SESSION_LOCAL' });
+  assert.ok(Object.isFrozen(read));
+  assert.strictEqual(read.code, undefined, 'ordinary denial exposes no domain .code');
+  const write = evaluateSessionAccess(A, sessionRequest({ operation: 'WRITE', owner_session_id: 'session-two' }));
+  assert.deepStrictEqual(write, { allowed: false, same_job: true, same_session: false, resource_scope: 'SESSION_LOCAL' });
+  assert.ok(Object.isFrozen(write));
 });
 
-// NIS13 — session matrix: same session + foreign job READ -> FOREIGN_JOB_REJECT
-// (session identity never overrides the job boundary).
+// NIS13 — foreign job: same session + READ -> FOREIGN_JOB_REJECT for BOTH
+// resource scopes (resource_scope never weakens job isolation).
 test('NIS13', () => {
-  expectCode(() => evaluateSessionAccess(A, sessionRequest({
-    operation: 'READ',
-    resource_job_id: 'nis.job-b',
-    resource_namespace: B_NS.session,
-    requester_session_id: 'session-one',
-    owner_session_id: 'session-one',
-  })), 'FOREIGN_JOB_REJECT');
+  for (const scope of ['JOB_SCOPED', 'SESSION_LOCAL']) {
+    expectCode(() => evaluateSessionAccess(A, sessionRequest({
+      operation: 'READ',
+      resource_scope: scope,
+      resource_job_id: 'nis.job-b',
+      resource_namespace: B_NS.session,
+      requester_session_id: 'session-one',
+      owner_session_id: 'session-one',
+    })), 'FOREIGN_JOB_REJECT');
+  }
 });
 
-// NIS14 — session matrix: same session + foreign job WRITE -> FOREIGN_NAMESPACE_WRITE_REJECTED.
+// NIS14 — foreign job: same session + WRITE -> FOREIGN_NAMESPACE_WRITE_REJECTED
+// for BOTH resource scopes.
 test('NIS14', () => {
-  expectCode(() => evaluateSessionAccess(A, sessionRequest({
-    operation: 'WRITE',
-    resource_job_id: 'nis.job-b',
-    resource_namespace: B_NS.session,
-    requester_session_id: 'session-one',
-    owner_session_id: 'session-one',
-  })), 'FOREIGN_NAMESPACE_WRITE_REJECTED');
+  for (const scope of ['JOB_SCOPED', 'SESSION_LOCAL']) {
+    expectCode(() => evaluateSessionAccess(A, sessionRequest({
+      operation: 'WRITE',
+      resource_scope: scope,
+      resource_job_id: 'nis.job-b',
+      resource_namespace: B_NS.session,
+      requester_session_id: 'session-one',
+      owner_session_id: 'session-one',
+    })), 'FOREIGN_NAMESPACE_WRITE_REJECTED');
+  }
 });
 
-// NIS15 — session matrix: different session + foreign job READ -> FOREIGN_JOB_REJECT.
+// NIS15 — foreign job: different session + READ -> FOREIGN_JOB_REJECT for
+// BOTH resource scopes.
 test('NIS15', () => {
-  expectCode(() => evaluateSessionAccess(A, sessionRequest({
-    operation: 'READ',
-    resource_job_id: 'nis.job-b',
-    resource_namespace: B_NS.session,
-    requester_session_id: 'session-one',
-    owner_session_id: 'session-two',
-  })), 'FOREIGN_JOB_REJECT');
+  for (const scope of ['JOB_SCOPED', 'SESSION_LOCAL']) {
+    expectCode(() => evaluateSessionAccess(A, sessionRequest({
+      operation: 'READ',
+      resource_scope: scope,
+      resource_job_id: 'nis.job-b',
+      resource_namespace: B_NS.session,
+      requester_session_id: 'session-one',
+      owner_session_id: 'session-two',
+    })), 'FOREIGN_JOB_REJECT');
+  }
 });
 
-// NIS16 — session matrix: different session + foreign job WRITE -> FOREIGN_NAMESPACE_WRITE_REJECTED.
+// NIS16 — foreign job: different session + WRITE -> FOREIGN_NAMESPACE_WRITE_REJECTED
+// for BOTH resource scopes.
 test('NIS16', () => {
-  expectCode(() => evaluateSessionAccess(A, sessionRequest({
-    operation: 'WRITE',
-    resource_job_id: 'nis.job-b',
-    resource_namespace: B_NS.session,
-    requester_session_id: 'session-one',
-    owner_session_id: 'session-two',
-  })), 'FOREIGN_NAMESPACE_WRITE_REJECTED');
+  for (const scope of ['JOB_SCOPED', 'SESSION_LOCAL']) {
+    expectCode(() => evaluateSessionAccess(A, sessionRequest({
+      operation: 'WRITE',
+      resource_scope: scope,
+      resource_job_id: 'nis.job-b',
+      resource_namespace: B_NS.session,
+      requester_session_id: 'session-one',
+      owner_session_id: 'session-two',
+    })), 'FOREIGN_NAMESPACE_WRITE_REJECTED');
+  }
 });
 
 // NIS17 — evidence: same-job READ and WRITE are allowed; decisions are frozen.
@@ -533,18 +593,19 @@ test('NIS28', () => {
   assert.notStrictEqual(decision, A);
   try { decision.allowed = false; } catch (e) { /* frozen */ }
   try { decision.same_job = false; } catch (e) { /* frozen */ }
-  assert.deepStrictEqual(decision, { allowed: true, same_job: true, same_session: true });
+  assert.deepStrictEqual(decision, { allowed: true, same_job: true, same_session: true, resource_scope: 'SESSION_LOCAL' });
 
   request.operation = 'WRITE';
   request.resource_namespace = 'job:evil:sessions';
-  assert.deepStrictEqual(decision, { allowed: true, same_job: true, same_session: true }, 'caller mutation must not alter a returned decision');
+  request.resource_scope = 'JOB_SCOPED';
+  assert.deepStrictEqual(decision, { allowed: true, same_job: true, same_session: true, resource_scope: 'SESSION_LOCAL' }, 'caller mutation must not alter a returned decision');
 
   // mutable contract clone: later caller mutation cannot alter the canonical decision
   const mutableContract = Object.assign({}, A);
   const decision2 = evaluateSessionAccess(mutableContract, sessionRequest({}));
   mutableContract.session_namespace = 'job:evil:sessions';
   mutableContract.job_id = 'evil.job';
-  assert.deepStrictEqual(decision2, { allowed: true, same_job: true, same_session: true });
+  assert.deepStrictEqual(decision2, { allowed: true, same_job: true, same_session: true, resource_scope: 'SESSION_LOCAL' });
   assert.ok(Object.isFrozen(decision2));
 
   // deny decisions are frozen too
@@ -559,6 +620,7 @@ test('NIS28', () => {
 test('NIS29', () => {
   const cases = [
     () => evaluateSessionAccess(A, sessionRequest({ operation: 'READ' })),
+    () => evaluateSessionAccess(A, sessionRequest({ resource_scope: 'JOB_SCOPED', operation: 'READ', owner_session_id: 'session-two' })),
     () => evaluateSessionAccess(A, sessionRequest({ operation: 'WRITE', owner_session_id: 'session-two' })),
     () => evaluateEvidenceAccess(A, resourceRequest({ operation: 'WRITE', resource_namespace: A_NS.evidence })),
     () => evaluateLedgerAccess(A, resourceRequest({ operation: 'READ', resource_namespace: A_NS.ledger })),
@@ -587,6 +649,7 @@ test('NIS30', () => {
   const battery = [
     () => evaluateSessionAccess(A, null),
     () => evaluateSessionAccess(A, sessionRequest({ resource_job_id: 'NIS.JOB-A' })),
+    () => evaluateSessionAccess(A, sessionRequest({ resource_scope: 'GLOBAL' })),
     () => evaluateSessionAccess(A, sessionRequest({ resource_job_id: 'nis.job-b', resource_namespace: B_NS.session })),
     () => evaluateSessionAccess(A, sessionRequest({ resource_namespace: B_NS.session })),
     () => evaluateSessionAccess(A, Object.assign({}, A, { session_namespace: 'job:evil:sessions' })),

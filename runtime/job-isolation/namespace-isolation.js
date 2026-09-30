@@ -5,7 +5,8 @@
  * governance/contracts/job-isolation-v1.md (sections 10-14) under policy
  * job-isolation@1.0.0:
  *
- *   - session namespace access (same/different session x same/different job);
+ *   - session namespace access (JOB_SCOPED / SESSION_LOCAL resource scope x
+ *     same/different session x same/different job);
  *   - evidence namespace access;
  *   - ledger namespace access;
  *   - runtime-state access and runtime-state cleanup ownership.
@@ -28,8 +29,9 @@
  *     setters;
  *   - resource descriptors are never silently normalized or repaired;
  *   - a noncanonical resource job_id propagates INVALID_JOB_ID;
- *   - malformed request descriptors and unknown operations fail closed with
- *     NAMESPACE_DERIVATION_FAILED (namespace interpretation impossible);
+ *   - malformed request descriptors, unknown operations, and unknown session
+ *     resource scopes fail closed with NAMESPACE_DERIVATION_FAILED
+ *     (namespace interpretation impossible);
  *   - a supplied namespace that does not match the deterministic namespace
  *     of the owning job fails closed with NAMESPACE_COLLISION; this never
  *     uses NAMESPACE_OVERRIDE_FORBIDDEN, which stays reserved for caller
@@ -40,10 +42,13 @@
  * Operation boundaries (locked):
  *   - access operations are exactly READ and WRITE;
  *   - runtime-state cleanup is a separate boundary with operation CLEANUP;
- *   - unknown operations fail closed; no nineteenth domain error exists.
+ *   - session resource scopes are exactly JOB_SCOPED and SESSION_LOCAL;
+ *   - unknown operations or resource scopes fail closed; no nineteenth
+ *     domain error exists.
  *
  * Error mapping (pinned by the #39 test suites):
- *   - malformed request descriptor / unknown operation -> NAMESPACE_DERIVATION_FAILED
+ *   - malformed request descriptor / unknown operation / unknown session
+ *     resource scope                                 -> NAMESPACE_DERIVATION_FAILED
  *   - noncanonical resource job_id                      -> INVALID_JOB_ID
  *   - foreign job: READ  -> FOREIGN_JOB_REJECT
  *                  WRITE -> FOREIGN_NAMESPACE_WRITE_REJECTED
@@ -78,6 +83,9 @@ const ACCESS_OPERATIONS = Object.freeze(['READ', 'WRITE']);
 const CLEANUP_OPERATION = 'CLEANUP';
 const CLEANUP_OPERATIONS = Object.freeze([CLEANUP_OPERATION]);
 
+/** Canonical session resource scopes (locked): exactly these two. */
+const SESSION_RESOURCE_SCOPES = Object.freeze(['JOB_SCOPED', 'SESSION_LOCAL']);
+
 /** Generic foreign-job access error mapping (contract sections 12-14). */
 const FOREIGN_ACCESS_ERRORS = Object.freeze({
   READ: 'FOREIGN_JOB_REJECT',
@@ -95,6 +103,7 @@ const SESSION_REQUEST_FIELDS = Object.freeze([
   'operation',
   'resource_job_id',
   'resource_namespace',
+  'resource_scope',
   'requester_session_id',
   'owner_session_id',
 ]);
@@ -174,6 +183,15 @@ function readOperation(fields, allowed, label) {
   return operation;
 }
 
+/** Read and validate the session resource scope against the locked enum. */
+function readResourceScope(fields) {
+  const scope = fields.resource_scope;
+  if (typeof scope !== 'string' || !SESSION_RESOURCE_SCOPES.includes(scope)) {
+    descriptorFailure('Session access request resource_scope is not a canonical resource scope');
+  }
+  return scope;
+}
+
 /**
  * Resource job_id must already be canonical: the existing canonicalizer is
  * used only to validate stability (canonicalizeJobId(x) === x). A
@@ -207,21 +225,34 @@ function assertSameJobNamespace(resourceNamespace, expectedNamespace, label) {
 /**
  * Evaluate session namespace access for the active job.
  *
- * Matrix (locked): same job + same session -> allowed; same job + different
- * session -> allowed=false (a normal fail-closed eligibility decision, not a
- * new canonical exception); foreign job -> rejection regardless of session
- * identity (session identity never overrides the job boundary).
+ * The request explicitly classifies the resource scope:
  *
- * The namespace used here is the canonical JobContract base session
- * namespace; no session-key derivation is invented. Session identifiers are
- * opaque upstream-resolved identities compared by exact equality only.
+ * - JOB_SCOPED: job-scoped operational state inside the owning job's session
+ *   namespace. Same canonical job + exact session namespace -> allowed for
+ *   the owning session AND for other sessions of the same job; session
+ *   equality does not restrict job-scoped state.
+ * - SESSION_LOCAL: session-local state. Same canonical job + exact session
+ *   namespace -> allowed only for the same exact session identity; a
+ *   different session receives a normal fail-closed decision
+ *   { allowed: false } (no new canonical exception).
  *
- * Returns a frozen decision { allowed, same_job, same_session }.
+ * Foreign job ownership is checked first and is never weakened by
+ * resource_scope or session equality: READ -> FOREIGN_JOB_REJECT;
+ * WRITE -> FOREIGN_NAMESPACE_WRITE_REJECTED.
+ *
+ * Both resource scopes use the canonical JobContract base session namespace;
+ * no session-key derivation (job:{job_id}:sessions:{session_key}) exists
+ * here. Session identifiers are opaque upstream-resolved identities compared
+ * by exact equality only.
+ *
+ * Returns a frozen decision
+ * { allowed, same_job, same_session, resource_scope }.
  */
 function evaluateSessionAccess(activeContract, request) {
   const contract = validateJobContract(activeContract);
   const fields = readExactFields(request, SESSION_REQUEST_FIELDS, 'Session access request');
   const operation = readOperation(fields, ACCESS_OPERATIONS, 'Session access request');
+  const resourceScope = readResourceScope(fields);
   const resourceNamespace = requireNonEmptyString(fields.resource_namespace, 'resource_namespace');
   const requesterSessionId = requireNonEmptyString(fields.requester_session_id, 'requester_session_id');
   const ownerSessionId = requireNonEmptyString(fields.owner_session_id, 'owner_session_id');
@@ -235,10 +266,19 @@ function evaluateSessionAccess(activeContract, request) {
   assertSameJobNamespace(resourceNamespace, derived.session_namespace, 'Session access request');
 
   const sameSession = requesterSessionId === ownerSessionId;
+  if (resourceScope === 'JOB_SCOPED') {
+    return Object.freeze({
+      allowed: true,
+      same_job: true,
+      same_session: sameSession,
+      resource_scope: 'JOB_SCOPED',
+    });
+  }
   return Object.freeze({
     allowed: sameSession,
     same_job: true,
     same_session: sameSession,
+    resource_scope: 'SESSION_LOCAL',
   });
 }
 
@@ -357,6 +397,7 @@ function evaluateRuntimeStateCleanup(activeContract, request) {
 module.exports = Object.freeze({
   ACCESS_OPERATIONS,
   CLEANUP_OPERATION,
+  SESSION_RESOURCE_SCOPES,
   evaluateSessionAccess,
   evaluateEvidenceAccess,
   evaluateLedgerAccess,

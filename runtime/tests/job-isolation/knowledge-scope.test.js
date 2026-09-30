@@ -274,7 +274,9 @@ test('KSC09', () => {
 });
 
 // KSC10 — SESSION_LOCAL: same session + foreign job -> FOREIGN_JOB_REJECT;
-// a session match never makes foreign content eligible.
+// foreign ownership is checked before the optional SESSION_LOCAL capability,
+// so a session match never makes foreign content eligible and a missing
+// capability never collapses a foreign source into ordinary ineligibility.
 test('KSC10', () => {
   expectCode(
     () => evaluateKnowledgeReadEligibility(A_FULL, knowledgeRequest({
@@ -285,9 +287,20 @@ test('KSC10', () => {
     })),
     'FOREIGN_JOB_REJECT'
   );
+  // capability absent must not mask foreign ownership
+  expectCode(
+    () => evaluateKnowledgeReadEligibility(A_BASE, knowledgeRequest({
+      source_scope: 'SESSION_LOCAL',
+      source_session_id: 'session-one',
+      source_job_id: 'ksc.job-b',
+      source_namespace: B_KNOWLEDGE,
+    })),
+    'FOREIGN_JOB_REJECT'
+  );
 });
 
-// KSC11 — GLOBAL: capability absent -> eligible=false.
+// KSC11 — GLOBAL: capability absent -> eligible=false for unowned and
+// same-job sources (no foreign owner involved).
 test('KSC11', () => {
   assert.deepStrictEqual(
     evaluateKnowledgeReadEligibility(A_SESSION, knowledgeRequest({ source_scope: 'GLOBAL', source_job_id: null, source_namespace: null })),
@@ -295,6 +308,11 @@ test('KSC11', () => {
   );
   assert.deepStrictEqual(
     evaluateKnowledgeReadEligibility(A_BASE, knowledgeRequest({ source_scope: 'GLOBAL', source_job_id: null, source_namespace: null })),
+    { eligible: false, scope: 'GLOBAL' }
+  );
+  // same-job source with capability absent -> eligible=false (ownership passed)
+  assert.deepStrictEqual(
+    evaluateKnowledgeReadEligibility(A_SESSION, knowledgeRequest({ source_scope: 'GLOBAL', source_job_id: 'ksc.job-a', source_namespace: A_KNOWLEDGE })),
     { eligible: false, scope: 'GLOBAL' }
   );
 });
@@ -353,7 +371,8 @@ test('KSC13', () => {
   );
 });
 
-// KSC14 — GLOBAL: foreign-owned source -> FOREIGN_JOB_REJECT.
+// KSC14 — GLOBAL: foreign-owned source -> FOREIGN_JOB_REJECT, even when the
+// active contract lacks the GLOBAL capability (ownership before capability).
 test('KSC14', () => {
   expectCode(
     () => evaluateKnowledgeReadEligibility(A_FULL, knowledgeRequest({
@@ -363,10 +382,19 @@ test('KSC14', () => {
     })),
     'FOREIGN_JOB_REJECT'
   );
+  expectCode(
+    () => evaluateKnowledgeReadEligibility(A_SESSION, knowledgeRequest({
+      source_scope: 'GLOBAL',
+      source_job_id: 'ksc.job-b',
+      source_namespace: B_KNOWLEDGE,
+    })),
+    'FOREIGN_JOB_REJECT'
+  );
 });
 
-// KSC15 — a foreign JOB_LOCAL / SESSION_LOCAL source cannot be promoted merely
-// because the active JobContract has GLOBAL.
+// KSC15 — a foreign JOB_LOCAL / SESSION_LOCAL source cannot be promoted
+// merely because the active JobContract has GLOBAL; foreign ownership also
+// outranks optional capabilities entirely.
 test('KSC15', () => {
   // foreign job-local source presented as GLOBAL with its own namespace
   expectCode(
@@ -389,6 +417,25 @@ test('KSC15', () => {
   // foreign session-local source with an identical session string still rejects
   expectCode(
     () => evaluateKnowledgeReadEligibility(A_FULL, knowledgeRequest({
+      source_scope: 'SESSION_LOCAL',
+      source_job_id: 'ksc.job-b',
+      source_session_id: 'session-one',
+      source_namespace: B_KNOWLEDGE,
+    })),
+    'FOREIGN_JOB_REJECT'
+  );
+  // active contract without GLOBAL + foreign source_job_id + GLOBAL scope
+  expectCode(
+    () => evaluateKnowledgeReadEligibility(A_SESSION, knowledgeRequest({
+      source_scope: 'GLOBAL',
+      source_job_id: 'ksc.job-b',
+      source_namespace: B_KNOWLEDGE,
+    })),
+    'FOREIGN_JOB_REJECT'
+  );
+  // active contract without SESSION_LOCAL + foreign source_job_id + SESSION_LOCAL scope
+  expectCode(
+    () => evaluateKnowledgeReadEligibility(A_BASE, knowledgeRequest({
       source_scope: 'SESSION_LOCAL',
       source_job_id: 'ksc.job-b',
       source_session_id: 'session-one',

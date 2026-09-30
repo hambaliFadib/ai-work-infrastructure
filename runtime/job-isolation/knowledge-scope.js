@@ -6,11 +6,19 @@
  * policy job-isolation@1.0.0:
  *
  *   - JOB_LOCAL: same canonical job only; session identity is irrelevant;
- *   - SESSION_LOCAL: requires the JobContract capability AND the same
- *     canonical job AND the same exact session identity;
- *   - GLOBAL: requires the JobContract capability AND an explicitly global /
- *     unowned source; foreign job-local or session-local sources can never be
- *     promoted merely because the active JobContract has GLOBAL.
+ *   - SESSION_LOCAL: requires the same canonical job AND the same exact
+ *     session identity, and then the JobContract capability;
+ *   - GLOBAL: requires an explicitly global / unowned source and then the
+ *     JobContract capability; foreign job-local or session-local sources can
+ *     never be promoted merely because the active JobContract has GLOBAL.
+ *
+ * Foreign-job ownership is enforced BEFORE any optional capability check:
+ * when a source declares a non-null source_job_id, the canonical source
+ * identity is validated first, a foreign owner is rejected with
+ * FOREIGN_JOB_REJECT, and only then do optional capability rules
+ * (SESSION_LOCAL / GLOBAL membership in knowledge_scope) apply. A foreign
+ * source can therefore never collapse into ordinary capability
+ * ineligibility.
  *
  * This module implements READ ELIGIBILITY only. It deliberately exposes NO
  * knowledge-write authorization API — GLOBAL provides read eligibility only
@@ -34,8 +42,9 @@
  *     setters; descriptors are never silently normalized or repaired;
  *   - unknown source scope -> INVALID_KNOWLEDGE_SCOPE;
  *   - noncanonical source job_id -> INVALID_JOB_ID;
- *   - foreign source job -> FOREIGN_JOB_REJECT (session equality never
- *     overrides the job boundary);
+ *   - foreign source job -> FOREIGN_JOB_REJECT, enforced BEFORE any optional
+ *     capability check and never overridden by session equality; a foreign
+ *     source can never collapse into ordinary capability ineligibility;
  *   - namespace identity that does not match the owning job's deterministic
  *     knowledge namespace -> NAMESPACE_COLLISION;
  *   - malformed descriptors / missing required ownership -> 
@@ -164,14 +173,15 @@ function knowledgeDecision(eligible, scope) {
  * - JOB_LOCAL: source_job_id must be the canonical active job_id and
  *   source_namespace the active job knowledge namespace; session identity is
  *   irrelevant to eligibility.
- * - SESSION_LOCAL: first requires the JobContract capability; then same
- *   canonical job AND same exact session identity. Foreign job:
- *   FOREIGN_JOB_REJECT — a session match never makes foreign content
+ * - SESSION_LOCAL: foreign source -> FOREIGN_JOB_REJECT (checked first);
+ *   same canonical job AND same exact session identity required, and then
+ *   the JobContract capability. A session match never makes foreign content
  *   eligible.
- * - GLOBAL: first requires the JobContract capability; the source must be
- *   explicitly global/unowned: (source_job_id = null AND source_namespace =
- *   null) OR (source_job_id = active job_id AND source_namespace = active job
- *   knowledge namespace). Foreign-owned sources: FOREIGN_JOB_REJECT.
+ * - GLOBAL: foreign-owned source -> FOREIGN_JOB_REJECT (checked first); the
+ *   source must be explicitly global/unowned: (source_job_id = null AND
+ *   source_namespace = null) OR (source_job_id = active job_id AND
+ *   source_namespace = active job knowledge namespace), and the JobContract
+ *   capability is then required.
  *
  * Returns a frozen decision { eligible, scope }; ordinary ineligibility is
  * never a domain error and exposes no .code.
@@ -216,15 +226,15 @@ function evaluateKnowledgeReadEligibility(activeContract, request) {
   }
 
   if (scope === 'SESSION_LOCAL') {
-    if (!contract.knowledge_scope.includes('SESSION_LOCAL')) {
-      return knowledgeDecision(false, 'SESSION_LOCAL');
-    }
     if (fields.source_job_id === null) {
       descriptorFailure('SESSION_LOCAL knowledge source requires an owning job_id');
     }
     const sourceJobId = assertCanonicalSourceJobId(fields.source_job_id);
     if (sourceJobId !== contract.job_id) {
       throw new JobIsolationError('FOREIGN_JOB_REJECT', 'Foreign job knowledge rejected');
+    }
+    if (!contract.knowledge_scope.includes('SESSION_LOCAL')) {
+      return knowledgeDecision(false, 'SESSION_LOCAL');
     }
     if (fields.source_namespace === null) {
       descriptorFailure('SESSION_LOCAL knowledge source requires a namespace identity');
@@ -238,10 +248,12 @@ function evaluateKnowledgeReadEligibility(activeContract, request) {
   }
 
   // scope === 'GLOBAL'
-  if (!contract.knowledge_scope.includes('GLOBAL')) {
-    return knowledgeDecision(false, 'GLOBAL');
-  }
   if (fields.source_job_id === null) {
+    // Unowned explicit global source: no foreign owner exists, so the
+    // optional capability may be evaluated first.
+    if (!contract.knowledge_scope.includes('GLOBAL')) {
+      return knowledgeDecision(false, 'GLOBAL');
+    }
     if (fields.source_namespace !== null) {
       throw new JobIsolationError('NAMESPACE_COLLISION', 'Unowned global source must not carry a namespace identity');
     }
@@ -250,6 +262,9 @@ function evaluateKnowledgeReadEligibility(activeContract, request) {
   const sourceJobId = assertCanonicalSourceJobId(fields.source_job_id);
   if (sourceJobId !== contract.job_id) {
     throw new JobIsolationError('FOREIGN_JOB_REJECT', 'Foreign job knowledge rejected');
+  }
+  if (!contract.knowledge_scope.includes('GLOBAL')) {
+    return knowledgeDecision(false, 'GLOBAL');
   }
   if (fields.source_namespace === null) {
     descriptorFailure('Same-job global source requires the owning job knowledge namespace');
