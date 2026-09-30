@@ -8,7 +8,8 @@
  *
  *   - main coordination authority state (main-only coordination checkout +
  *     authoritative main SHA), module-produced and non-forgeable from plain
- *     caller data;
+ *     caller data, carrying an authoritative active lane registry;
+ *   - an explicit pure lane-registration transition into that registry;
  *   - explicit + audited synchronization recognition for stale lane
  *     baselines (the rule locked as intentional_synchronization =
  *     EXPLICIT_AND_AUDITED by job-isolation@1.0.0);
@@ -18,24 +19,38 @@
  *
  * Integration only: this module adds no Job Isolation business semantics.
  * It never replaces, reimplements, or reinterprets the modules it composes:
- * contract validation, lane validation/ownership/staleness, namespace access,
- * and knowledge eligibility outcomes all come from the existing authorities
- * and are propagated unchanged.
+ * contract validation, lane validation/ownership/staleness/registry
+ * decisions, namespace access, and knowledge eligibility outcomes all come
+ * from the existing authorities and are propagated unchanged.
  *
  * Trust boundaries (fail closed):
  *   - coordinator state is accepted as authority ONLY when produced by this
- *     module (module-private trust registry). Raw lookalike objects, JSON
+ *     module (module-private brand registry). Raw lookalike objects, JSON
  *     clones, and caller-added "verified"/"trusted" flags never grant
  *     authority; untrusted authority fails closed with
- *     COORDINATION_CHECKOUT_VIOLATION;
+ *     COORDINATION_CHECKOUT_VIOLATION. The brand registry carries trust
+ *     only — all semantic state (coordination branch, authoritative main
+ *     SHA, authoritative lane registry, synchronizations) lives in the
+ *     frozen, inspectable returned state;
+ *   - the authoritative active lane registry is carried in coordinator
+ *     state; lanes enter it ONLY through the explicit
+ *     registerCoordinationLane transition. Merge eligibility and
+ *     synchronization recording require an already-registered exact lane
+ *     and never auto-register. A temporary empty registry is used solely as
+ *     a local structural/canonicalization adapter and never decides
+ *     ownership persistence;
  *   - every public request descriptor is a strict plain data record
  *     (Object.prototype or null prototype) with exactly the locked own keys;
  *     unknown, hidden, or symbol keys, accessor-backed properties, and
  *     custom prototypes fail closed with LANE_CONTRACT_INVALID; accessor
  *     functions never execute during validation;
  *   - synchronization records derive lane_id, job_id, from_main_sha, and
- *     to_main_sha from a validated lane plus trusted state — never from
- *     caller fields; a raw synchronization lookalike never clears staleness;
+ *     to_main_sha from the authoritative registered lane plus trusted state
+ *     — never from caller fields; a raw synchronization lookalike never
+ *     clears staleness;
+ *   - foreign contract/lane job mismatch is rejected before writer
+ *     ownership is evaluated; writer identity is irrelevant once lane and
+ *     contract jobs differ;
  *   - ParallelLane records are never mutated: intentional synchronization is
  *     represented as coordinator audit state only.
  *
@@ -112,9 +127,10 @@ const COORDINATED_REQUEST_FIELDS = Object.freeze([
 const MAIN_SHA_PATTERN = new RegExp(POLICY.parallel_lane.baseline_main_sha.pattern);
 
 /**
- * Module-private trust registry for coordination authority state. Only state
- * objects produced by this module are members; plain lookalike objects and
- * JSON clones are not, and caller-added flags never grant membership.
+ * Module-private brand registry for coordination authority state. Membership
+ * is granted ONLY by this module when it constructs a state; it carries
+ * trust branding only — no semantic state is hidden here. Plain lookalike
+ * objects, JSON clones, and caller-added flags never become members.
  */
 const TRUSTED_COORDINATOR_STATES = new WeakSet();
 
@@ -170,14 +186,16 @@ function readExactFields(record, fields, label) {
 }
 
 /**
- * Produce a frozen, copy-safe trusted coordination state and register it as
- * module-produced authority. Synchronization records and the collection are
- * frozen; the caller receives no mutable references.
+ * Produce a frozen, copy-safe trusted coordination state and brand it as
+ * module-produced authority. The lane registry and synchronization records
+ * are frozen; the caller receives no mutable references. All semantic state
+ * is carried in the returned object — nothing authoritative is hidden.
  */
-function createTrustedState(coordinationBranch, authoritativeMainSha, synchronizations) {
+function createTrustedState(coordinationBranch, authoritativeMainSha, laneRegistry, synchronizations) {
   const state = Object.freeze({
     coordination_branch: coordinationBranch,
     authoritative_main_sha: authoritativeMainSha,
+    lane_registry: Object.freeze(laneRegistry.slice()),
     synchronizations: Object.freeze(synchronizations.slice()),
   });
   TRUSTED_COORDINATOR_STATES.add(state);
@@ -197,16 +215,42 @@ function assertTrustedState(state) {
 }
 
 /**
- * Canonicalize a lane through the existing ParallelLane authority (fresh
- * registry + registerLane). Returns the frozen canonical lane copy; lane
- * errors propagate unchanged. No ParallelLane schema logic is reproduced
- * here.
+ * Local structural/canonicalization adapter ONLY. Produces a canonical frozen
+ * lane copy for job-boundary comparison, using a throwaway empty registry.
+ * The throwaway registry is NOT active lane authority: it never decides
+ * ownership persistence, is never returned, and never replaces coordinator
+ * state's authoritative lane registry. Lane structural errors propagate
+ * unchanged from the existing ParallelLane authority.
  */
-function canonicalizeLaneViaAuthority(lane) {
-  const registry = createLaneRegistry();
-  const registered = registerLane(registry, lane);
+function canonicalizeLaneForComparison(lane) {
+  const scratchRegistry = createLaneRegistry();
+  const registered = registerLane(scratchRegistry, lane);
   if (!registered.ok) {
     throw new JobIsolationError(registered.error, 'Lane rejected by the ParallelLane authority');
+  }
+  return registered.lane;
+}
+
+/**
+ * Require the canonical lane to be present EXACTLY in the authoritative
+ * coordinator lane registry. Uses the existing registerLane comparison
+ * behavior; no ParallelLane rules are duplicated:
+ *
+ * - exact registered lane: idempotent match -> return the authoritative lane;
+ * - same lane_id with a different writer: LANE_OWNERSHIP_CONFLICT (propagated);
+ * - same lane_id with a different job/branch/worktree/baseline:
+ *   LANE_ID_COLLISION (propagated);
+ * - lane_id absent from the authoritative registry: LANE_CONTRACT_INVALID
+ *   (the integration structural mapping) — merge evaluation and
+ *   synchronization recording never auto-register.
+ */
+function requireRegisteredLane(state, lane) {
+  const registered = registerLane(state.lane_registry, lane);
+  if (!registered.ok) {
+    throw new JobIsolationError(registered.error, 'Lane registration rejected by the ParallelLane authority');
+  }
+  if (registered.idempotent !== true) {
+    throw new JobIsolationError('LANE_CONTRACT_INVALID', 'Lane is not present in the authoritative coordinator lane registry');
   }
   return registered.lane;
 }
@@ -246,7 +290,10 @@ function mergeDecision(lane, authoritativeMainSha, synchronized, auditRef) {
 /**
  * Create module-produced main coordination authority state.
  *
- * Input (locked, exact): coordination_branch, authoritative_main_sha.
+ * Input (locked, exact): coordination_branch, authoritative_main_sha. A
+ * caller-supplied lane registry is not accepted at construction; the
+ * authoritative lane registry begins empty and grows only through the
+ * explicit registerCoordinationLane transition.
  *
  * - coordination_branch must pass the existing ParallelLane coordination
  *   checkout validation: 'main' is valid; any other string fails closed with
@@ -256,8 +303,9 @@ function mergeDecision(lane, authoritativeMainSha, synchronized, auditRef) {
  *   pattern (POLICY.parallel_lane.baseline_main_sha.pattern); a malformed
  *   SHA fails closed with LANE_CONTRACT_INVALID.
  *
- * The returned state is frozen, copy-safe, and registered as module-produced
- * authority; synchronizations start empty. No timestamp, no generated ID.
+ * The returned state is frozen, copy-safe, and branded as module-produced
+ * authority: { coordination_branch, authoritative_main_sha, lane_registry,
+ * synchronizations }. No timestamp, no generated ID.
  */
 function createMainCoordinationState(input) {
   const fields = readExactFields(input, STATE_INPUT_FIELDS, 'Main coordination state input');
@@ -272,23 +320,50 @@ function createMainCoordinationState(input) {
     throw new JobIsolationError('LANE_CONTRACT_INVALID', 'authoritative_main_sha does not match the locked main-SHA pattern');
   }
 
-  return createTrustedState(checkout.branch, sha, []);
+  return createTrustedState(checkout.branch, sha, [], []);
+}
+
+/**
+ * Pure state transition: register a lane into the authoritative coordinator
+ * lane registry.
+ *
+ * - coordinatorState must be module-produced authority;
+ * - the existing ParallelLane registerLane behavior decides everything:
+ *   new lane_id registers; an exact canonical lane is idempotent; a same
+ *   lane_id with a different writer is LANE_OWNERSHIP_CONFLICT; a same
+ *   lane_id with a different job/branch/worktree/baseline is
+ *   LANE_ID_COLLISION — all propagated unchanged;
+ * - the supplied coordinator state is never mutated; synchronizations are
+ *   preserved unchanged; the returned NEW trusted frozen state carries the
+ *   canonical registry returned by the ParallelLane authority.
+ */
+function registerCoordinationLane(coordinatorState, lane) {
+  const state = assertTrustedState(coordinatorState);
+  const registered = registerLane(state.lane_registry, lane);
+  if (!registered.ok) {
+    throw new JobIsolationError(registered.error, 'Lane registration rejected by the ParallelLane authority');
+  }
+  return createTrustedState(state.coordination_branch, state.authoritative_main_sha, registered.registry, state.synchronizations);
 }
 
 /**
  * Pure state transition: record an explicit + audited synchronization of a
- * lane baseline to the current authoritative main SHA.
+ * registered lane baseline to the current authoritative main SHA.
  *
  * - coordinatorState must be module-produced authority;
- * - lane is canonicalized through the existing ParallelLane authority; lane
- *   errors propagate unchanged;
+ * - lane is structurally canonicalized, then must already be present EXACTLY
+ *   in the authoritative coordinator lane registry; an unregistered lane
+ *   fails closed with LANE_CONTRACT_INVALID and a registry collision
+ *   propagates its exact existing error — synchronization recording is never
+ *   an implicit registration path;
  * - audit_ref is a required non-empty opaque caller-supplied external audit
  *   reference (not a credential, not a timestamp, not generated here);
- * - lane_id, job_id, from_main_sha (= lane.baseline_main_sha), and
+ * - lane_id, job_id, from_main_sha (= registered lane baseline), and
  *   to_main_sha (= state.authoritative_main_sha) are DERIVED by this module
  *   and can never be supplied by the caller;
- * - the ParallelLane record is never mutated; the original state is never
- *   mutated (pure transition returning a new trusted state);
+ * - the ParallelLane record is never mutated and the lane registry is
+ *   preserved byte-equivalently; the original state is never mutated (pure
+ *   transition returning a new trusted state);
  * - at most one synchronization identity (lane_id, job_id, from_main_sha,
  *   to_main_sha) is recorded: an exact repeat with the same audit_ref is
  *   idempotent; the same identity with a different audit_ref fails closed
@@ -296,16 +371,17 @@ function createMainCoordinationState(input) {
  */
 function recordAuditedSynchronization(coordinatorState, lane, auditRef) {
   const state = assertTrustedState(coordinatorState);
-  const canonicalLane = canonicalizeLaneViaAuthority(lane);
+  const canonicalLane = canonicalizeLaneForComparison(lane);
+  const authoritativeLane = requireRegisteredLane(state, canonicalLane);
 
   if (typeof auditRef !== 'string' || auditRef.length === 0) {
     throw new JobIsolationError('LANE_CONTRACT_INVALID', 'audit_ref must be a non-empty string');
   }
 
   const record = Object.freeze({
-    lane_id: canonicalLane.lane_id,
-    job_id: canonicalLane.job_id,
-    from_main_sha: canonicalLane.baseline_main_sha,
+    lane_id: authoritativeLane.lane_id,
+    job_id: authoritativeLane.job_id,
+    from_main_sha: authoritativeLane.baseline_main_sha,
     to_main_sha: state.authoritative_main_sha,
     audit_ref: auditRef,
   });
@@ -325,12 +401,12 @@ function recordAuditedSynchronization(coordinatorState, lane, auditRef) {
 
   if (existing !== null) {
     if (existing.audit_ref === record.audit_ref) {
-      return createTrustedState(state.coordination_branch, state.authoritative_main_sha, state.synchronizations);
+      return createTrustedState(state.coordination_branch, state.authoritative_main_sha, state.lane_registry, state.synchronizations);
     }
     throw new JobIsolationError('LANE_ID_COLLISION', 'Synchronization identity already recorded with a different audit_ref');
   }
 
-  return createTrustedState(state.coordination_branch, state.authoritative_main_sha, state.synchronizations.concat([record]));
+  return createTrustedState(state.coordination_branch, state.authoritative_main_sha, state.lane_registry, state.synchronizations.concat([record]));
 }
 
 /**
@@ -340,14 +416,19 @@ function recordAuditedSynchronization(coordinatorState, lane, auditRef) {
  *
  *   1. validate coordinator authority (module-produced state only);
  *   2. validate canonical JobContract (existing authority; errors propagate);
- *   3. canonicalize/validate the lane (existing ParallelLane registry API);
- *   4. verify writer ownership (existing evaluateOwnership);
- *   5. verify lane.job_id === contract.job_id (mismatch: FOREIGN_JOB_REJECT);
- *   6. evaluate the lane baseline against authoritative main;
- *   7. if stale, require a matching coordinator-produced audited
+ *   3. structurally canonicalize the lane safely (local adapter);
+ *   4. verify lane.job_id === contract.job_id — the foreign-job boundary is
+ *      evaluated BEFORE writer ownership, and writer identity is irrelevant
+ *      once lane and contract jobs differ (mismatch: FOREIGN_JOB_REJECT);
+ *   5. require the lane to be present exactly in the authoritative
+ *      coordinator lane registry (unregistered: LANE_CONTRACT_INVALID;
+ *      collision/ownership: propagated unchanged; no auto-registration);
+ *   6. verify writer ownership (existing evaluateOwnership);
+ *   7. evaluate the lane baseline against authoritative main;
+ *   8. if stale, require a matching coordinator-produced audited
  *      synchronization record; otherwise STALE_MAIN_BASELINE (a stale lane
  *      is never authoritative main; no automatic synchronization exists);
- *   8. return a frozen merge-eligibility decision.
+ *   9. return a frozen merge-eligibility decision.
  *
  * The decision is an eligibility statement only: it is NOT execution
  * authorization and never implies approval.
@@ -357,15 +438,17 @@ function evaluateMergeEligibility(coordinatorState, request) {
   const fields = readExactFields(request, MERGE_REQUEST_FIELDS, 'Merge eligibility request');
 
   const contract = validateJobContract(fields.contract);
-  const lane = canonicalizeLaneViaAuthority(fields.lane);
+  const candidateLane = canonicalizeLaneForComparison(fields.lane);
+
+  if (candidateLane.job_id !== contract.job_id) {
+    throw new JobIsolationError('FOREIGN_JOB_REJECT', 'Lane job does not own this JobContract');
+  }
+
+  const lane = requireRegisteredLane(state, candidateLane);
 
   const ownership = evaluateOwnership(lane, fields.writer_identity);
   if (!ownership.ok) {
     throw new JobIsolationError(ownership.error, 'Lane ownership rejected by the ParallelLane authority');
-  }
-
-  if (lane.job_id !== contract.job_id) {
-    throw new JobIsolationError('FOREIGN_JOB_REJECT', 'Lane job does not own this JobContract');
   }
 
   const freshness = evaluateStaleBaseline(lane, state.authoritative_main_sha);
@@ -403,10 +486,11 @@ const BOUNDARY_DISPATCH = Object.freeze({
  * Request (locked, exact): contract, lane, writer_identity, boundary, request.
  *
  * Order (locked): merge eligibility is evaluated first; only a merge-eligible
- * lane may reach the boundary dispatch. The dispatched evaluator receives the
- * request unchanged and its exact decision / canonical error semantics are
- * preserved (no wrapping, no translation). If merge eligibility fails, the
- * boundary evaluator never executes.
+ * (and therefore already-registered) lane may reach the boundary dispatch.
+ * The dispatched evaluator receives the request unchanged and its exact
+ * decision / canonical error semantics are preserved (no wrapping, no
+ * translation). If merge eligibility fails, the boundary evaluator never
+ * executes.
  *
  * The returned integration result is frozen:
  * { boundary, merge_eligibility, decision }.
@@ -438,6 +522,7 @@ function evaluateCoordinatedOperation(coordinatorState, request) {
 module.exports = Object.freeze({
   COORDINATED_BOUNDARIES,
   createMainCoordinationState,
+  registerCoordinationLane,
   recordAuditedSynchronization,
   evaluateMergeEligibility,
   evaluateCoordinatedOperation,
