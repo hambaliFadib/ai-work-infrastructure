@@ -22,7 +22,10 @@ IMPLEMENTED / VERIFIED
 IMPLEMENTED / VERIFIED
 
 9B-06 Acceptance:
-NOT VERIFIED
+VERIFIED
+
+Acceptance evidence:
+docs/acceptance/phase-9b.md
 
 This document is the normative human-readable contract for Job Isolation v1. It defines
 WHAT Phase 9B means. It was introduced as a governance-only act by 9B-01 (#37) and does
@@ -458,6 +461,6 @@ Total: 40.
 - Policy: job-isolation@1.0.0
 - Implementation: PARTIAL
 - Implemented runtime modules: `runtime/job-isolation/job-contract.js` (JobContract Runtime Core, 9B-02 / #38), `runtime/job-isolation/namespace-derivation.js` (deterministic namespace derivation primitives, 9B-02 / #38), `runtime/job-isolation/parallel-lane.js` (ParallelLane runtime semantics, 9B-04 / #40), `runtime/job-isolation/namespace-isolation.js` (namespace isolation enforcement, 9B-03 / #39), `runtime/job-isolation/knowledge-scope.js` (knowledge-scope read eligibility, 9B-03 / #39), and `runtime/job-isolation/coordinator.js` (main coordination integration and audited synchronization recognition, 9B-05 / #41).
-- Pending: Phase 9B acceptance (9B-06).
-- Acceptance executions: declared for 9B-06 (#42); NOT VERIFIED.
+- Pending: none.
+- Acceptance executions: VERIFIED - 40/40 (9B-06 / #42); evidence: docs/acceptance/phase-9b.md.
 - Architecture Freeze: NOT CLAIMED.

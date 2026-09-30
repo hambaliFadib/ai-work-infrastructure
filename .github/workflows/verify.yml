@@ -90,16 +90,20 @@ jobs:
           grep -Eq 'Context Hydration.*VERIFIED' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq 'context-hydration@1.0.1' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq '37/37' docs/ARCHITECTURE-BLUEPRINT.md
-          grep -Eq 'Phase 9B.*IN PROGRESS' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Eq 'Phase 9B.*VERIFIED' docs/ARCHITECTURE-BLUEPRINT.md
+          if grep -Fq 'Phase 9B is IN PROGRESS' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale Phase 9B IN PROGRESS claim in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
+          if grep -Fq 'Phase 9B acceptance: NOT VERIFIED' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale Phase 9B acceptance claim in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
           if grep -Fq 'Phase 9B and Phase 9C remain TARGET' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale Phase 9B TARGET claim in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
           grep -Eq 'Phase 9C.*TARGET' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Eq 'Phase 9A.*VERIFIED' docs/BUILD-PLAN.md
+          grep -Eq 'Phase 9B.*VERIFIED' docs/BUILD-PLAN.md
           grep -Fq '## In-progress work' docs/BUILD-PLAN.md
-          grep -Eq 'Phase 9B.*IN PROGRESS' docs/BUILD-PLAN.md
           if grep -Eq 'Phase 9B.*TARGET' docs/BUILD-PLAN.md; then echo 'stale Phase 9B TARGET state in docs/BUILD-PLAN.md'; exit 1; fi
           grep -Eq 'Phase 9C.*TARGET' docs/BUILD-PLAN.md
           if grep -Eq 'Phase 9A.*TARGET' docs/BUILD-PLAN.md; then echo 'stale Phase 9A TARGET state in docs/BUILD-PLAN.md'; exit 1; fi
           grep -Fq 'Phase 9A is VERIFIED' docs/WORKFLOW.md
+          grep -Eq 'Phase 9B.*VERIFIED' docs/WORKFLOW.md
+          if grep -Fq 'Phase 9B acceptance: NOT VERIFIED' docs/WORKFLOW.md; then echo 'stale Phase 9B acceptance claim in docs/WORKFLOW.md'; exit 1; fi
           if grep -Fq 'RCB-06 branch rules and RCB-07 project metadata are pending' docs/WORKFLOW.md; then echo 'stale RCB pending claim in docs/WORKFLOW.md'; exit 1; fi
           if grep -Eq 'Phase 9A.*TARGET' docs/WORKFLOW.md; then echo 'stale Phase 9A TARGET state in docs/WORKFLOW.md'; exit 1; fi
           grep -Fq 'Phase 9A' docs/governance/repository-collaboration.md
@@ -107,14 +111,18 @@ jobs:
           grep -Fq 'Phase 9B' docs/governance/repository-collaboration.md
           grep -Fq '#37' docs/governance/repository-collaboration.md
           grep -Fq '#42' docs/governance/repository-collaboration.md
+          grep -Eq '#42.*CLOSED / VERIFIED' docs/governance/repository-collaboration.md
           test -f docs/MIGRATION-MANIFEST.md
+          test -f docs/acceptance/phase-9b.md
           grep -Fq 'Repository collaboration activation is VERIFIED' README.md
           grep -Eq 'Phase 9A.*VERIFIED' README.md
           grep -Fq '37/37' README.md
           grep -Fq 'context-hydration@1.0.1' README.md
-          grep -Eq 'Phase 9B.*IN PROGRESS' README.md
+          grep -Eq 'Phase 9B.*VERIFIED' README.md
           grep -Fq 'job-isolation@1.0.0' README.md
           grep -Fq 'PARTIAL' README.md
+          if grep -Eq 'Phase 9B.*IN PROGRESS' README.md; then echo 'stale Phase 9B IN PROGRESS claim in README.md'; exit 1; fi
+          if grep -Fq 'Phase 9B acceptance closure' README.md; then echo 'stale Phase 9B pending-acceptance claim in README.md'; exit 1; fi
           if grep -Fq 'Phase 9B and Phase 9C remain TARGET' README.md; then echo 'stale Phase 9B TARGET claim in README.md'; exit 1; fi
           grep -Eq 'Phase 9C.*TARGET' README.md
           if grep -Fq 'Phase 9A is also TARGET' README.md; then echo 'stale Phase 9A TARGET claim in README.md'; exit 1; fi
@@ -123,8 +131,9 @@ jobs:
           if grep -Fq 'commits and remotes are currently absent' README.md; then echo 'stale absent-remotes claim in README.md'; exit 1; fi
           if grep -Fq 'GitHub collaboration files belong to RCB-03 and are not created yet' README.md; then echo 'stale RCB-03 claim in README.md'; exit 1; fi
           grep -Eq 'Phase 9A.*VERIFIED' docs/MIGRATION-MANIFEST.md
-          grep -Eq 'Phase 9B.*IN PROGRESS' docs/MIGRATION-MANIFEST.md
+          grep -Eq 'Phase 9B.*VERIFIED' docs/MIGRATION-MANIFEST.md
           grep -Fq 'job-isolation@1.0.0' docs/MIGRATION-MANIFEST.md
+          if grep -Fq 'Phase 9B is active implementation work' docs/MIGRATION-MANIFEST.md; then echo 'stale Phase 9B active-work claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
           grep -Fq 'PARTIAL' docs/MIGRATION-MANIFEST.md
           if grep -Fq 'Phase 9B Job Isolation + Parallelism is TARGET / PLANNED' docs/MIGRATION-MANIFEST.md; then echo 'stale Phase 9B TARGET / PLANNED claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
           if grep -Fq 'Phase 9B and Phase 9C remain future target work' docs/MIGRATION-MANIFEST.md; then echo 'stale Phase 9B future-work claim in docs/MIGRATION-MANIFEST.md'; exit 1; fi
@@ -141,12 +150,20 @@ jobs:
           grep -Fq 'working context as a derived job-scoped view, not a JobContract field' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq 'operation-specific execution targets such as database targets' docs/ARCHITECTURE-BLUEPRINT.md
           if grep -Fq 'A unified JobContract does not yet exist' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale JobContract claim in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
-          grep -Fq 'Runtime implementation: IN PROGRESS / PARTIAL' docs/ARCHITECTURE-BLUEPRINT.md
+          grep -Fq 'Runtime implementation: PARTIAL' docs/ARCHITECTURE-BLUEPRINT.md
           grep -Fq 'PARTIAL' docs/ARCHITECTURE-BLUEPRINT.md
           if grep -Fq 'Runtime implementation: NOT STARTED' docs/ARCHITECTURE-BLUEPRINT.md; then echo 'stale runtime implementation status in docs/ARCHITECTURE-BLUEPRINT.md'; exit 1; fi
           grep -Fq 'job-isolation@1.0.0' docs/WORKFLOW.md
           grep -Fq 'Governance contract: LOCKED' docs/WORKFLOW.md
-          grep -Fq 'Runtime implementation: IN PROGRESS / PARTIAL' docs/WORKFLOW.md
+          grep -Fq 'Runtime implementation: PARTIAL' docs/WORKFLOW.md
           grep -Fq 'PARTIAL' docs/WORKFLOW.md
           if grep -Fq 'Runtime implementation: NOT STARTED' docs/WORKFLOW.md; then echo 'stale runtime implementation status in docs/WORKFLOW.md'; exit 1; fi
           if grep -Fq 'governance not yet locked' docs/WORKFLOW.md; then echo 'stale Phase 9B lock claim in docs/WORKFLOW.md'; exit 1; fi
+          grep -Fq 'PHASE 9B VERIFIED' docs/acceptance/phase-9b.md
+          grep -Eq '9B-06 Acceptance.*VERIFIED' docs/acceptance/phase-9b.md
+          grep -Fq 'job-isolation@1.0.0' docs/acceptance/phase-9b.md
+          if grep -Eq 'Phase 9B.*IN PROGRESS' docs/acceptance/phase-9b.md; then echo 'stale Phase 9B IN PROGRESS claim in docs/acceptance/phase-9b.md'; exit 1; fi
+          if grep -Fq '9B-06 NOT VERIFIED' docs/acceptance/phase-9b.md; then echo 'stale 9B-06 NOT VERIFIED claim in docs/acceptance/phase-9b.md'; exit 1; fi
+          if grep -Fq 'Phase 9B acceptance remains pending' docs/acceptance/phase-9b.md; then echo 'stale Phase 9B acceptance-pending claim in docs/acceptance/phase-9b.md'; exit 1; fi
+          awk '/^9B-06 Acceptance:$/ { getline; if ($0 == "VERIFIED") found = 1 } END { exit(found ? 0 : 1) }' governance/contracts/job-isolation-v1.md
+          if grep -A1 -F '9B-06 Acceptance:' governance/contracts/job-isolation-v1.md | grep -Fq 'NOT VERIFIED'; then echo 'stale 9B-06 status in governance/contracts/job-isolation-v1.md'; exit 1; fi

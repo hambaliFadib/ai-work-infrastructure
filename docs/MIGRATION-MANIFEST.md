@@ -4,11 +4,11 @@ This document preserves migration history while separating historical context fr
 
 ## Current status
 
-Phase 2–9A are VERIFIED. RCB-01 through RCB-07 are COMPLETE / VERIFIED.
+Phase 2–9B are VERIFIED. RCB-01 through RCB-07 are COMPLETE / VERIFIED.
 
 Phase 9A Context Hydration is VERIFIED: 37/37 acceptance, runner 9/9, policy `context-hydration@1.0.1`.
 
-Phase 9B Job Isolation + Parallelism is IN PROGRESS / NOT VERIFIED.
+Phase 9B Job Isolation + Parallelism is VERIFIED.
 
 policy: `job-isolation@1.0.0`
 
@@ -62,6 +62,6 @@ Historical references to client workflows, legacy workspaces, project names, and
 
 Local-only state continues to be excluded by ignore rules. GitHub repository collaboration is activated and governed. Phase 9A is implemented and VERIFIED.
 
-Phase 9B is active implementation work: IN PROGRESS / NOT VERIFIED, runtime PARTIAL.
+Phase 9B is VERIFIED (40/40 acceptance); runtime remains PARTIAL.
 
 Phase 9C remains future target work. Clean-clone verification and public v1 release remain TARGET.

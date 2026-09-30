@@ -22,7 +22,7 @@ Generic Runtime / MCP
 Governed capability modules
 ```
 
-OpenCode engine is external/upstream. The OpenCode control plane is repository-owned. `main` is the coordination authority and authoritative context, not a single execution thread. `main` and `worker` are session roles/namespaces, not manager-agent hierarchies or autonomous swarms. Parallel execution is TARGET — Phase 9B.
+OpenCode engine is external/upstream. The OpenCode control plane is repository-owned. `main` is the coordination authority and authoritative context, not a single execution thread. `main` and `worker` are session roles/namespaces, not manager-agent hierarchies or autonomous swarms. Parallel execution is VERIFIED — Phase 9B.
 
 The nine commands are `/main`, `/work`, `/checkpoint`, `/load`, `/merge`, `/promote`, `/demote`, `/rename`, and `/archive`.
 
@@ -56,7 +56,7 @@ Oracle Core = VERIFIED. Oracle Driver = VERIFIED. Oracle MCP stdio = VERIFIED. M
 
 Phase 9A is VERIFIED (37/37 acceptance, runner 9/9, policy context-hydration@1.0.1).
 
-Phase 9B is IN PROGRESS / NOT VERIFIED under job-isolation@1.0.0.
+Phase 9B is VERIFIED under job-isolation@1.0.0 (40/40 acceptance, runner 9/9).
 
 Phase 9C remains TARGET / NOT VERIFIED.
 
@@ -112,7 +112,7 @@ Total: 37 locked Phase 9A acceptance invariants. Acceptance result: 37/37 VERIFI
 
 Governance contract: CONTRACT LOCKED — job-isolation@1.0.0
 
-Runtime implementation: IN PROGRESS / PARTIAL
+Runtime implementation: PARTIAL
 
 Implemented:
 - JobContract Runtime Core
@@ -124,9 +124,9 @@ Implemented:
 - audited synchronization recognition
 
 Pending:
-- Phase 9B acceptance
+- none (Phase 9B acceptance VERIFIED)
 
-Phase 9B acceptance: NOT VERIFIED
+Phase 9B acceptance: VERIFIED - 40/40 (evidence: docs/acceptance/phase-9b.md)
 
 JobContract v1: exactly 8 canonical fields:
 job_id, profile, session_namespace, knowledge_scope, evidence_namespace, ledger_namespace, runtime_state_namespace, execution_permissions.
@@ -142,4 +142,4 @@ Target states: NEW, ACTIVE, CHECKPOINTED, BLOCKED, INTERRUPTED, FAILED, CONFLICT
 
 # V1 DEFINITION OF DONE
 
-Phase 2–9A are VERIFIED. Phase 9B–9C must reach VERIFIED with acceptance evidence before Architecture Freeze v1 is eligible. Architecture Freeze v1 = NOT CLAIMED. Zero-state bootstrap is PARTIAL; clean-clone verification and public v1 release remain TARGET.
+Phase 2–9B are VERIFIED. Phase 9C must reach VERIFIED with acceptance evidence before Architecture Freeze v1 is eligible. Architecture Freeze v1 = NOT CLAIMED. Zero-state bootstrap is PARTIAL; clean-clone verification and public v1 release remain TARGET.
