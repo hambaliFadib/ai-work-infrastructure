@@ -13,7 +13,7 @@ Implementation status by sub-issue:
 IMPLEMENTED / VERIFIED
 
 9B-03 Namespace Isolation:
-NOT IMPLEMENTED
+IMPLEMENTED / VERIFIED
 
 9B-04 Parallel Lane:
 IMPLEMENTED / VERIFIED
@@ -455,7 +455,7 @@ Total: 40.
 - Status: CONTRACT LOCKED
 - Policy: job-isolation@1.0.0
 - Implementation: PARTIAL
-- Implemented runtime modules: `runtime/job-isolation/job-contract.js` (JobContract Runtime Core, 9B-02 / #38) and `runtime/job-isolation/namespace-derivation.js` (deterministic namespace derivation primitives, 9B-02 / #38).
-- Pending: namespace isolation enforcement (9B-03), parallel lane semantics (9B-04), main coordination integration (9B-05), Phase 9B acceptance (9B-06).
+- Implemented runtime modules: `runtime/job-isolation/job-contract.js` (JobContract Runtime Core, 9B-02 / #38), `runtime/job-isolation/namespace-derivation.js` (deterministic namespace derivation primitives, 9B-02 / #38), `runtime/job-isolation/parallel-lane.js` (ParallelLane runtime semantics, 9B-04 / #40), `runtime/job-isolation/namespace-isolation.js` (namespace isolation enforcement, 9B-03 / #39), and `runtime/job-isolation/knowledge-scope.js` (knowledge-scope read eligibility, 9B-03 / #39).
+- Pending: parallel lane main integration (9B-05), main coordination integration (9B-05), Phase 9B acceptance (9B-06).
 - Acceptance executions: declared for 9B-06 (#42); NOT VERIFIED.
 - Architecture Freeze: NOT CLAIMED.

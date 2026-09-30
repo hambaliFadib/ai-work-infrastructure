@@ -33,9 +33,9 @@ Implemented:
 - JobContract Runtime Core
 - deterministic namespace derivation primitives
 - ParallelLane runtime semantics
+- namespace isolation enforcement
 
 Remaining:
-- namespace isolation
 - parallel-lane main-coordination integration
 - main coordination integration
 - acceptance closure

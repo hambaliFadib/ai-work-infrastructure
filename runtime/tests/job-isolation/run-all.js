@@ -20,6 +20,8 @@ const SUITE_REGISTRY = [
   { name: 'job-contract', file: 'job-contract.test.js', required: true },
   { name: 'namespace-derivation', file: 'namespace-derivation.test.js', required: true },
   { name: 'parallel-lane', file: 'parallel-lane.test.js', required: true },
+  { name: 'namespace-isolation', file: 'namespace-isolation.test.js', required: true },
+  { name: 'knowledge-scope', file: 'knowledge-scope.test.js', required: true },
 ];
 
 const DIR = __dirname;
