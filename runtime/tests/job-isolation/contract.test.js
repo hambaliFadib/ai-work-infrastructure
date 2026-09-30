@@ -67,8 +67,8 @@ test('JIC01', () => {
   assert.strictEqual(policy.policy_ref, 'job-isolation@1.0.0');
   assert.strictEqual(policy.status, 'CONTRACT_LOCKED');
   assert.strictEqual(policy.implementation_status, 'PARTIAL');
-  assert.deepStrictEqual(policy.implementation_components.implemented, ['JOB_CONTRACT_RUNTIME_CORE', 'NAMESPACE_DERIVATION_PRIMITIVES', 'PARALLEL_LANE_SEMANTICS', 'NAMESPACE_ISOLATION_ENFORCEMENT']);
-  assert.deepStrictEqual(policy.implementation_components.pending, ['PARALLEL_LANE_MAIN_INTEGRATION', 'MAIN_COORDINATION_INTEGRATION', 'PHASE_9B_ACCEPTANCE']);
+  assert.deepStrictEqual(policy.implementation_components.implemented, ['JOB_CONTRACT_RUNTIME_CORE', 'NAMESPACE_DERIVATION_PRIMITIVES', 'PARALLEL_LANE_SEMANTICS', 'NAMESPACE_ISOLATION_ENFORCEMENT', 'PARALLEL_LANE_MAIN_INTEGRATION', 'MAIN_COORDINATION_INTEGRATION']);
+  assert.deepStrictEqual(policy.implementation_components.pending, ['PHASE_9B_ACCEPTANCE']);
 });
 
 // JIC02 — human contract status/policy parity
@@ -369,8 +369,8 @@ test('JIC33', () => {
   assert.ok(/#38\s+9B-02 JobContract Runtime Core\s+— CLOSED \/ VERIFIED/.test(collab));
   assert.ok(/#39\s+9B-03 Namespace Isolation Enforcement\s+— CLOSED \/ VERIFIED/.test(collab));
   assert.ok(/#40\s+9B-04 Parallel Lane Semantics\s+— CLOSED \/ VERIFIED/.test(collab));
-  assert.ok(/#41\s+9B-05 Main Coordination Integration\s+— status:ready/.test(collab));
-  assert.ok(/#42\s+9B-06 Acceptance Closure\s+— status:blocked/.test(collab));
+  assert.ok(/#41\s+9B-05 Main Coordination Integration\s+— CLOSED \/ VERIFIED/.test(collab));
+  assert.ok(/#42\s+9B-06 Acceptance Closure\s+— status:ready/.test(collab));
   assert.ok(collab.includes('CONTRACT_LOCKED / PARTIAL'));
   assert.ok(collab.includes('IN PROGRESS / PARTIAL'));
   assert.ok(policy.implementation_components.implemented.includes('PARALLEL_LANE_SEMANTICS'));
@@ -388,6 +388,20 @@ test('JIC33', () => {
   assert.ok(workflow.includes('namespace isolation enforcement'));
   assert.ok(contract.includes('Phase 9B'));
   assert.ok(!contract.includes('PHASE 9B VERIFIED'));
+  // 9B-05 main coordination integration parity (proposed post-merge truth)
+  assert.ok(policy.implementation_components.implemented.includes('PARALLEL_LANE_MAIN_INTEGRATION'));
+  assert.ok(policy.implementation_components.implemented.includes('MAIN_COORDINATION_INTEGRATION'));
+  assert.deepStrictEqual(policy.implementation_components.pending, ['PHASE_9B_ACCEPTANCE']);
+  assert.ok(/9B-05 Integration:\s*IMPLEMENTED \/ VERIFIED/.test(contract));
+  assert.ok(arch.includes('main coordination integration'));
+  assert.ok(arch.includes('audited synchronization recognition'));
+  assert.ok(readme.includes('Main Coordination Integration'));
+  assert.ok(readme.includes('audited synchronization recognition'));
+  assert.ok(blueprint.includes('Main Coordination Integration'));
+  assert.ok(blueprint.includes('audited synchronization recognition'));
+  assert.ok(workflow.includes('main coordination integration'));
+  assert.ok(workflow.includes('audited synchronization recognition'));
+  assert.ok(contract.includes('Architecture Freeze: NOT CLAIMED'));
   assert.ok(readme.includes('Phase 9B'));
   assert.ok(readme.includes('IN PROGRESS'));
   assert.ok(readme.includes('NOT VERIFIED'));

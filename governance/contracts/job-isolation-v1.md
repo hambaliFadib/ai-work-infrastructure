@@ -19,13 +19,15 @@ IMPLEMENTED / VERIFIED
 IMPLEMENTED / VERIFIED
 
 9B-05 Integration:
-NOT IMPLEMENTED
+IMPLEMENTED / VERIFIED
 
 9B-06 Acceptance:
 NOT VERIFIED
 
 This document is the normative human-readable contract for Job Isolation v1. It defines
-WHAT Phase 9B means. It does NOT implement the runtime that enforces it.
+WHAT Phase 9B means. It was introduced as a governance-only act by 9B-01 (#37) and does
+not itself authorize execution; runtime implementation now exists through the later 9B
+child issues (9B-02 through 9B-05).
 
 ---
 
@@ -43,7 +45,7 @@ Lock deterministic, fail-closed job isolation semantics for multi-job and parall
 
 ## 2. Non-Goals
 
-- No runtime implementation. No `runtime/job-isolation/*` module exists or is created here.
+- No runtime implementation in 9B-01. 9B-01 introduced no `runtime/job-isolation/*` module; runtime implementation now exists through later 9B child issues (9B-02 through 9B-05).
 - No Context Hydration behavior change. Policy `context-hydration@1.0.1` stays frozen.
 - No redesign of the approval system (`approval gate`, `safe mode` remain authoritative).
 - No Phase 9C recovery/resume state machine.
@@ -267,7 +269,7 @@ writer_identity
 baseline_main_sha
 ```
 
-This is a governance contract only. No runtime code is created.
+This is a governance contract definition; 9B-01 created no runtime code (ParallelLane runtime semantics now exist through 9B-04 / #40).
 
 ## 18. Lane Ownership
 
@@ -455,7 +457,7 @@ Total: 40.
 - Status: CONTRACT LOCKED
 - Policy: job-isolation@1.0.0
 - Implementation: PARTIAL
-- Implemented runtime modules: `runtime/job-isolation/job-contract.js` (JobContract Runtime Core, 9B-02 / #38), `runtime/job-isolation/namespace-derivation.js` (deterministic namespace derivation primitives, 9B-02 / #38), `runtime/job-isolation/parallel-lane.js` (ParallelLane runtime semantics, 9B-04 / #40), `runtime/job-isolation/namespace-isolation.js` (namespace isolation enforcement, 9B-03 / #39), and `runtime/job-isolation/knowledge-scope.js` (knowledge-scope read eligibility, 9B-03 / #39).
-- Pending: parallel lane main integration (9B-05), main coordination integration (9B-05), Phase 9B acceptance (9B-06).
+- Implemented runtime modules: `runtime/job-isolation/job-contract.js` (JobContract Runtime Core, 9B-02 / #38), `runtime/job-isolation/namespace-derivation.js` (deterministic namespace derivation primitives, 9B-02 / #38), `runtime/job-isolation/parallel-lane.js` (ParallelLane runtime semantics, 9B-04 / #40), `runtime/job-isolation/namespace-isolation.js` (namespace isolation enforcement, 9B-03 / #39), `runtime/job-isolation/knowledge-scope.js` (knowledge-scope read eligibility, 9B-03 / #39), and `runtime/job-isolation/coordinator.js` (main coordination integration and audited synchronization recognition, 9B-05 / #41).
+- Pending: Phase 9B acceptance (9B-06).
 - Acceptance executions: declared for 9B-06 (#42); NOT VERIFIED.
 - Architecture Freeze: NOT CLAIMED.
