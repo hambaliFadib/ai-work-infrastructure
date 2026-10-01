@@ -17,7 +17,7 @@ It owns the OpenCode control plane: contracts, governance boundaries, bootstrap 
 | Oracle live writes | DISABLED |
 | Context Hydration (Phase 9A) | VERIFIED |
 
-Phase 2 through Phase 9A are VERIFIED. See [the architecture blueprint](docs/ARCHITECTURE-BLUEPRINT.md) for the evidence boundary.
+Phase 2 through Phase 9B are VERIFIED. See [the architecture blueprint](docs/ARCHITECTURE-BLUEPRINT.md) for the evidence boundary.
 
 Phase 9A acceptance: 37/37 — runner: 9/9 — policy: `context-hydration@1.0.1`.
 

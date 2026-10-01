@@ -22,7 +22,7 @@ Generic Runtime / MCP
 Governed capability modules
 ```
 
-OpenCode engine is external/upstream. The OpenCode control plane is repository-owned. `main` is the coordination authority and authoritative context, not a single execution thread. `main` and `worker` are session roles/namespaces, not manager-agent hierarchies or autonomous swarms. Parallel execution is VERIFIED — Phase 9B.
+OpenCode engine is external/upstream. The OpenCode control plane is repository-owned. `main` is the coordination authority and authoritative context, not a single execution thread. `main` and `worker` are session roles/namespaces, not manager-agent hierarchies or autonomous swarms. Phase 9B parallel-semantics acceptance is VERIFIED.
 
 The nine commands are `/main`, `/work`, `/checkpoint`, `/load`, `/merge`, `/promote`, `/demote`, `/rename`, and `/archive`.
 

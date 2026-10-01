@@ -125,7 +125,7 @@ policy:     job-isolation@1.0.0 — CONTRACT_LOCKED / PARTIAL
 ### Phase 9C — Session Recovery
 
 ```text
-epic:     #17 status:blocked (blocked until Phase 9B VERIFIED)
+epic:     #17 status:blocked
 children: 0
 ```
 
