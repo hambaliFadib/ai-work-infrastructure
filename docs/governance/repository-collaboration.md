@@ -107,7 +107,7 @@ policy:     context-hydration@1.0.1
 ```text
 #43  9B-00C Phase 9 architecture status truth sync  — CLOSED / VERIFIED
 
-#16  epic  — OPEN — IN PROGRESS / PARTIAL
+#16  epic  — OPEN — PHASE 9B VERIFIED / runtime PARTIAL
 children: 6
 
 #37  9B-01 Job Isolation Governance Contract  — CLOSED / VERIFIED
@@ -115,15 +115,17 @@ children: 6
 #39  9B-03 Namespace Isolation Enforcement    — CLOSED / VERIFIED
 #40  9B-04 Parallel Lane Semantics            — CLOSED / VERIFIED
 #41  9B-05 Main Coordination Integration      — CLOSED / VERIFIED
-#42  9B-06 Acceptance Closure                 — status:ready
+#42  9B-06 Acceptance Closure                 — CLOSED / VERIFIED
 
-policy: job-isolation@1.0.0 — CONTRACT_LOCKED / PARTIAL
+acceptance: 40/40
+runner:     9/9
+policy:     job-isolation@1.0.0 — CONTRACT_LOCKED / PARTIAL
 ```
 
 ### Phase 9C — Session Recovery
 
 ```text
-epic:     #17 status:blocked (blocked until Phase 9B VERIFIED)
+epic:     #17 status:blocked
 children: 0
 ```
 

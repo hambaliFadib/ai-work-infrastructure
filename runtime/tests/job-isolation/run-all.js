@@ -23,6 +23,7 @@ const SUITE_REGISTRY = [
   { name: 'namespace-isolation', file: 'namespace-isolation.test.js', required: true },
   { name: 'knowledge-scope', file: 'knowledge-scope.test.js', required: true },
   { name: 'integration', file: 'integration.test.js', required: true },
+  { name: 'acceptance', file: 'acceptance.test.js', required: true },
 ];
 
 const DIR = __dirname;

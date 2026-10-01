@@ -68,7 +68,7 @@ test('JIC01', () => {
   assert.strictEqual(policy.status, 'CONTRACT_LOCKED');
   assert.strictEqual(policy.implementation_status, 'PARTIAL');
   assert.deepStrictEqual(policy.implementation_components.implemented, ['JOB_CONTRACT_RUNTIME_CORE', 'NAMESPACE_DERIVATION_PRIMITIVES', 'PARALLEL_LANE_SEMANTICS', 'NAMESPACE_ISOLATION_ENFORCEMENT', 'PARALLEL_LANE_MAIN_INTEGRATION', 'MAIN_COORDINATION_INTEGRATION']);
-  assert.deepStrictEqual(policy.implementation_components.pending, ['PHASE_9B_ACCEPTANCE']);
+  assert.deepStrictEqual(policy.implementation_components.pending, []);
 });
 
 // JIC02 — human contract status/policy parity
@@ -86,7 +86,8 @@ test('JIC02', () => {
   assert.ok(!contract.includes('NOT MERGED'));
   assert.ok(contract.includes('9B-05 Integration:'));
   assert.ok(contract.includes('9B-06 Acceptance:'));
-  assert.ok(contract.includes('NOT VERIFIED'));
+  assert.ok(/9B-06 Acceptance:\s*VERIFIED/.test(contract));
+  assert.ok(contract.includes('docs/acceptance/phase-9b.md'));
 });
 
 // JIC03 — exact 8 JobContract required fields
@@ -328,7 +329,7 @@ test('JIC32', () => {
   assert.ok(contract.includes('context-hydration@1.0.1'));
   assert.ok(arch.includes('context-hydration@1.0.1'));
   assert.ok(arch.includes('CONTRACT LOCKED'));
-  assert.ok(arch.includes('RUNTIME IMPLEMENTATION: IN PROGRESS / PARTIAL'));
+  assert.ok(arch.includes('RUNTIME IMPLEMENTATION: PARTIAL'));
   assert.ok(!arch.includes('IMPLEMENTATION NOT STARTED'));
   assert.ok(collab.includes('job-isolation@1.0.0'));
   assert.strictEqual(policy.job_contract.required_fields.length, 8);
@@ -355,14 +356,14 @@ test('JIC33', () => {
   assert.strictEqual(policy.implementation_status, 'PARTIAL');
   assert.ok(contract.includes('Implementation: PARTIAL'));
   assert.ok(!contract.includes('Implementation: NOT IMPLEMENTED'));
-  assert.ok(arch.includes('RUNTIME IMPLEMENTATION: IN PROGRESS / PARTIAL'));
+  assert.ok(arch.includes('RUNTIME IMPLEMENTATION: PARTIAL'));
   assert.ok(arch.includes('JobContract Runtime Core'));
   assert.ok(arch.includes('namespace derivation primitives'));
   assert.ok(!arch.includes('IMPLEMENTATION NOT STARTED'));
-  assert.ok(blueprint.includes('Runtime implementation: IN PROGRESS / PARTIAL'));
-  assert.ok(blueprint.includes('Phase 9B acceptance: NOT VERIFIED'));
+  assert.ok(blueprint.includes('Runtime implementation: PARTIAL'));
+  assert.ok(blueprint.includes('Phase 9B acceptance: VERIFIED'));
   assert.ok(!blueprint.includes('Runtime implementation: NOT STARTED'));
-  assert.ok(workflow.includes('Runtime implementation: IN PROGRESS / PARTIAL'));
+  assert.ok(workflow.includes('Runtime implementation: PARTIAL'));
   assert.ok(workflow.includes('#38'));
   assert.ok(workflow.includes('JobContract Runtime Core'));
   assert.ok(!workflow.includes('Runtime implementation: NOT STARTED'));
@@ -370,9 +371,9 @@ test('JIC33', () => {
   assert.ok(/#39\s+9B-03 Namespace Isolation Enforcement\s+— CLOSED \/ VERIFIED/.test(collab));
   assert.ok(/#40\s+9B-04 Parallel Lane Semantics\s+— CLOSED \/ VERIFIED/.test(collab));
   assert.ok(/#41\s+9B-05 Main Coordination Integration\s+— CLOSED \/ VERIFIED/.test(collab));
-  assert.ok(/#42\s+9B-06 Acceptance Closure\s+— status:ready/.test(collab));
+  assert.ok(/#42\s+9B-06 Acceptance Closure\s+— CLOSED \/ VERIFIED/.test(collab));
   assert.ok(collab.includes('CONTRACT_LOCKED / PARTIAL'));
-  assert.ok(collab.includes('IN PROGRESS / PARTIAL'));
+  assert.ok(collab.includes('PHASE 9B VERIFIED'));
   assert.ok(policy.implementation_components.implemented.includes('PARALLEL_LANE_SEMANTICS'));
   assert.ok(arch.includes('ParallelLane runtime semantics'));
   assert.ok(readme.includes('ParallelLane runtime semantics'));
@@ -387,11 +388,12 @@ test('JIC33', () => {
   assert.ok(blueprint.includes('namespace isolation enforcement'));
   assert.ok(workflow.includes('namespace isolation enforcement'));
   assert.ok(contract.includes('Phase 9B'));
-  assert.ok(!contract.includes('PHASE 9B VERIFIED'));
+  assert.ok(/9B-06 Acceptance:\s*VERIFIED/.test(contract));
+  assert.ok(contract.includes('docs/acceptance/phase-9b.md'));
   // 9B-05 main coordination integration parity (proposed post-merge truth)
   assert.ok(policy.implementation_components.implemented.includes('PARALLEL_LANE_MAIN_INTEGRATION'));
   assert.ok(policy.implementation_components.implemented.includes('MAIN_COORDINATION_INTEGRATION'));
-  assert.deepStrictEqual(policy.implementation_components.pending, ['PHASE_9B_ACCEPTANCE']);
+  assert.deepStrictEqual(policy.implementation_components.pending, []);
   assert.ok(/9B-05 Integration:\s*IMPLEMENTED \/ VERIFIED/.test(contract));
   assert.ok(arch.includes('main coordination integration'));
   assert.ok(arch.includes('audited synchronization recognition'));
@@ -403,21 +405,20 @@ test('JIC33', () => {
   assert.ok(workflow.includes('audited synchronization recognition'));
   assert.ok(contract.includes('Architecture Freeze: NOT CLAIMED'));
   assert.ok(readme.includes('Phase 9B'));
-  assert.ok(readme.includes('IN PROGRESS'));
+  assert.ok(/Phase 9B: VERIFIED/.test(readme));
   assert.ok(readme.includes('NOT VERIFIED'));
   assert.ok(readme.includes('job-isolation@1.0.0'));
   assert.ok(readme.includes('PARTIAL'));
   assert.ok(!readme.includes('Phase 9B and Phase 9C remain TARGET'));
   assert.ok(migration.includes('Phase 9B'));
-  assert.ok(migration.includes('IN PROGRESS'));
+  assert.ok(/Phase 9B[^\n]*VERIFIED/.test(migration));
   assert.ok(migration.includes('NOT VERIFIED'));
   assert.ok(migration.includes('job-isolation@1.0.0'));
   assert.ok(migration.includes('PARTIAL'));
   assert.ok(!migration.includes('TARGET / PLANNED'));
   assert.ok(!migration.includes('Phase 9B and Phase 9C remain future target work'));
   assert.ok(buildPlan.includes('Phase 9B'));
-  assert.ok(buildPlan.includes('IN PROGRESS'));
-  assert.ok(buildPlan.includes('NOT VERIFIED'));
+  assert.ok(/Phase 9B\s+Job Isolation \+ Parallelism\s+VERIFIED/.test(buildPlan));
   assert.ok(buildPlan.includes('PARTIAL'));
   assert.ok(!/Phase 9B.*TARGET/.test(buildPlan));
   assert.ok(workflow.includes('NOT VERIFIED'));

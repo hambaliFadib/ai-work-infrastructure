@@ -17,15 +17,17 @@ It owns the OpenCode control plane: contracts, governance boundaries, bootstrap 
 | Oracle live writes | DISABLED |
 | Context Hydration (Phase 9A) | VERIFIED |
 
-Phase 2 through Phase 9A are VERIFIED. See [the architecture blueprint](docs/ARCHITECTURE-BLUEPRINT.md) for the evidence boundary.
+Phase 2 through Phase 9B are VERIFIED. See [the architecture blueprint](docs/ARCHITECTURE-BLUEPRINT.md) for the evidence boundary.
 
 Phase 9A acceptance: 37/37 — runner: 9/9 — policy: `context-hydration@1.0.1`.
 
-## In progress
+## Phase 9B — Job Isolation + Parallelism
 
-Phase 9B — Job Isolation + Parallelism: IN PROGRESS / NOT VERIFIED
+Phase 9B: VERIFIED
 
 Governance: CONTRACT LOCKED — job-isolation@1.0.0
+
+Acceptance: VERIFIED — 40/40 (evidence: docs/acceptance/phase-9b.md)
 
 Runtime: PARTIAL
 
@@ -38,9 +40,6 @@ Implemented:
 - Main Coordination Integration
 - audited synchronization recognition
 
-Remaining:
-- Phase 9B acceptance closure
-
 ## Target architecture
 
 - Session recovery — TARGET (Phase 9C)
@@ -49,8 +48,9 @@ Remaining:
 - Public v1 release — TARGET
 
 Phase 9A is VERIFIED.
-Phase 9B is IN PROGRESS / NOT VERIFIED.
-Phase 9C remains TARGET.
+Phase 9B is VERIFIED — acceptance 40/40.
+Phase 9C remains TARGET / NOT VERIFIED.
+Architecture Freeze remains NOT CLAIMED.
 
 ## Safety posture
 

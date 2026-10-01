@@ -6,10 +6,10 @@
   "implementation_status": "PARTIAL",
   "implementation_components": {
     "implemented": ["JOB_CONTRACT_RUNTIME_CORE", "NAMESPACE_DERIVATION_PRIMITIVES", "PARALLEL_LANE_SEMANTICS", "NAMESPACE_ISOLATION_ENFORCEMENT", "PARALLEL_LANE_MAIN_INTEGRATION", "MAIN_COORDINATION_INTEGRATION"],
-    "pending": ["PHASE_9B_ACCEPTANCE"]
+    "pending": []
   },
   "phase": "9B",
-  "description": "Normative governance contract for Job Isolation v1: JobContract, job identity, namespace isolation, parallel lanes, capability ceilings, canonical fail-closed errors, and the Phase 9B acceptance model. Implementation status: PARTIAL - JobContract runtime core, namespace derivation primitives, ParallelLane semantics, namespace isolation enforcement, and main coordination integration (including parallel lane main integration and audited synchronization recognition) are implemented; Phase 9B acceptance remains pending.",
+  "description": "Normative governance contract for Job Isolation v1: JobContract, job identity, namespace isolation, parallel lanes, capability ceilings, canonical fail-closed errors, and the Phase 9B acceptance model. Implementation status: PARTIAL - JobContract runtime core, namespace derivation primitives, ParallelLane semantics, namespace isolation enforcement, and main coordination integration (including parallel lane main integration and audited synchronization recognition) are implemented; Phase 9B acceptance is VERIFIED.",
   "job_contract": {
     "required_fields": ["job_id", "profile", "session_namespace", "knowledge_scope", "evidence_namespace", "ledger_namespace", "runtime_state_namespace", "execution_permissions"],
     "unknown_fields": "FAIL_CLOSED",

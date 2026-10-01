@@ -1,7 +1,8 @@
 # Job Isolation — Architecture Document
 
 Status: CONTRACT LOCKED
-RUNTIME IMPLEMENTATION: IN PROGRESS / PARTIAL
+RUNTIME IMPLEMENTATION: PARTIAL
+Phase 9B: VERIFIED
 Policy: job-isolation@1.0.0
 Phase: 9B
 Governance issue: #37 (9B-01)
@@ -10,7 +11,7 @@ This document describes the architecture of Job Isolation v1 as locked by
 `governance/contracts/job-isolation-v1.md`. The JobContract core, namespace derivation
 primitives, ParallelLane runtime semantics, namespace isolation enforcement (including
 knowledge-scope read eligibility), and main coordination integration (including audited
-synchronization recognition) are implemented modules; remaining stages are conceptual.
+synchronization recognition) are implemented modules; Phase 9B acceptance is VERIFIED (see section 5).
 
 All flow descriptions below are:
 
@@ -113,7 +114,7 @@ CONCEPTUAL / PARTIAL — see section 5
 
 ## 5. Implementation Status
 
-CONTRACT LOCKED. RUNTIME IMPLEMENTATION: IN PROGRESS / PARTIAL.
+CONTRACT LOCKED. RUNTIME IMPLEMENTATION: PARTIAL. PHASE 9B: VERIFIED.
 
 Implemented:
 - JobContract Runtime Core (runtime/job-isolation/job-contract.js, 9B-02 / #38)
@@ -125,9 +126,12 @@ Implemented:
 - audited synchronization recognition (runtime/job-isolation/coordinator.js, 9B-05 / #41)
 
 Pending:
-- Phase 9B acceptance (9B-06 / #42)
+- none (Phase 9B acceptance VERIFIED via 9B-06 / #42)
+
+Acceptance:
+- Phase 9B acceptance VERIFIED - 40/40 (docs/acceptance/phase-9b.md)
 
 Main coordination integration is implemented as a pure composition layer over the existing
 runtime authorities; it introduces no behavioral change to JobContract, namespace derivation,
-namespace isolation, knowledge scope, or ParallelLane. Coordination integration implemented
-is NOT Phase 9B VERIFIED: acceptance executions are declared for 9B-06 (#42) and are NOT VERIFIED.
+namespace isolation, knowledge scope, or ParallelLane. Phase 9B acceptance is VERIFIED (40/40);
+evidence: docs/acceptance/phase-9b.md. Phase 9B VERIFIED does not claim Architecture Freeze or Phase 9C.

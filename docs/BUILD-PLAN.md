@@ -11,6 +11,7 @@ Phase 6  Generic Runtime / MCP              VERIFIED
 Phase 7  Oracle Safe Core                   VERIFIED
 Phase 8  Oracle Secure Read-Only            VERIFIED
 Phase 9A Context Hydration                  VERIFIED
+Phase 9B Job Isolation + Parallelism        VERIFIED
 ```
 
 ## Repository Collaboration Baseline
@@ -31,10 +32,7 @@ RCB-07  VERIFIED
 
 ## In-progress work
 
-```text
-Phase 9B  Job Isolation + Parallelism        IN PROGRESS / NOT VERIFIED
-          runtime PARTIAL
-```
+(none)
 
 ## Target work
 
@@ -43,8 +41,9 @@ Phase 9C  Session Recovery                   TARGET
 ```
 
 Phase 9A is VERIFIED.
-Phase 9B is IN PROGRESS / NOT VERIFIED.
+Phase 9B is VERIFIED.
 Phase 9C remains TARGET.
+Runtime remains PARTIAL.
 Architecture Freeze v1 remains blocked until 9A + 9B + 9C are all VERIFIED.
 Bootstrap, clean-clone verification, and public release follow the freeze and remain TARGET.
 
