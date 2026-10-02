@@ -140,6 +140,8 @@ The broader Job Isolation boundary also includes:
 
 Target states: NEW, ACTIVE, CHECKPOINTED, BLOCKED, INTERRUPTED, FAILED, CONFLICTED, MERGE_PENDING, RESOLVED, ARCHIVED. No silent recovery is claimed.
 
+Governance contract: session-recovery@1.0.0 — CONTRACT LOCKED (runtime NONE; acceptance DECLARED, not executed; Phase 9C NOT VERIFIED).
+
 # V1 DEFINITION OF DONE
 
 Phase 2–9B are VERIFIED. Phase 9C must reach VERIFIED with acceptance evidence before Architecture Freeze v1 is eligible. Architecture Freeze v1 = NOT CLAIMED. Zero-state bootstrap is PARTIAL; clean-clone verification and public v1 release remain TARGET.

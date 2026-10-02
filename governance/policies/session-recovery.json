@@ -1,0 +1,354 @@
+{
+  "policy_id": "session-recovery",
+  "policy_version": "1.0.0",
+  "policy_ref": "session-recovery@1.0.0",
+  "status": "CONTRACT_LOCKED",
+  "implementation_status": "NONE",
+  "phase": "9C",
+  "epic": 17,
+  "description": "Normative governance contract for Session Recovery v1: 10-state recovery model, 41-edge allow-list transitions, RecoveryObject identity, immutable append-only checkpoint model, approval-gated transitions, canonical fail-closed errors, and the declared Phase 9C acceptance model. Implementation status: NONE - no runtime module exists; acceptance DECLARED, not executed; Phase 9C NOT VERIFIED.",
+  "core_principle": "NO_SILENT_RECOVERY",
+  "recovery_object": {
+    "identity_fields": ["job_id", "session_key"],
+    "scope": "ONE_PER_CANONICAL_JOB_AND_OPAQUE_SESSION_PAIR",
+    "record_fields": ["job_id", "session_key", "current_state", "transition_seq", "checkpoint_seq", "policy_ref"],
+    "unknown_fields": "FAIL_CLOSED",
+    "unknown_fields_error": "SESSION_RECOVERY_INVALID",
+    "create": {
+      "exact_pair_reuse": "IDEMPOTENT",
+      "policy_ref_mismatch_error": "SESSION_RECOVERY_INVALID",
+      "identity_immutable_after_creation": true
+    },
+    "session_key": {
+      "kind": "OPAQUE_CANONICAL_SESSION_IDENTITY",
+      "normalization": "NONE",
+      "comparison": "EXACT_STRING",
+      "parsed_by_9c": false
+    },
+    "transitions": {
+      "start_at": 0,
+      "monotonic": true
+    },
+    "checkpoints": {
+      "start_at": 0,
+      "monotonic": true
+    },
+    "timestamps": "FORBIDDEN"
+  },
+  "states": ["NEW", "ACTIVE", "CHECKPOINTED", "BLOCKED", "INTERRUPTED", "FAILED", "CONFLICTED", "MERGE_PENDING", "RESOLVED", "ARCHIVED"],
+  "state_count": 10,
+  "terminal_states": ["ARCHIVED"],
+  "resolved": {
+    "terminal": false,
+    "outgoing": ["ARCHIVED"]
+  },
+  "archived": {
+    "terminal": true,
+    "outgoing": [],
+    "same_pair_reentry_in_v1": "FORBIDDEN",
+    "reentry_error": "ILLEGAL_TRANSITION"
+  },
+  "transition_model": {
+    "semantics": "ALLOW_LIST",
+    "allowed_count": 41,
+    "ordered_pairs_total": 100,
+    "forbidden_count": 59,
+    "forbidden_error": "ILLEGAL_TRANSITION",
+    "into_new": "FORBIDDEN",
+    "out_of_archived": "FORBIDDEN",
+    "allowed_self_edges": [["CHECKPOINTED", "CHECKPOINTED"]],
+    "operation_is_pure_function_of": ["from_state", "to_state"],
+    "unknown_operation": "REJECTED",
+    "automatic_transition_sources": ["process_restart", "wall_clock", "reads", "validations", "staleness_heuristics"],
+    "transitions": [
+      { "from": "NEW", "to": "ACTIVE", "operation": "START" },
+      { "from": "NEW", "to": "ARCHIVED", "operation": "ARCHIVE" },
+      { "from": "ACTIVE", "to": "CHECKPOINTED", "operation": "CHECKPOINT_CREATE" },
+      { "from": "ACTIVE", "to": "BLOCKED", "operation": "BLOCK_RECORD" },
+      { "from": "ACTIVE", "to": "INTERRUPTED", "operation": "INTERRUPT_RECORD" },
+      { "from": "ACTIVE", "to": "FAILED", "operation": "FAILURE_RECORD" },
+      { "from": "ACTIVE", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
+      { "from": "ACTIVE", "to": "MERGE_PENDING", "operation": "MERGE_ELIGIBLE_RECORD" },
+      { "from": "ACTIVE", "to": "RESOLVED", "operation": "CLOSE" },
+      { "from": "CHECKPOINTED", "to": "ACTIVE", "operation": "RESUME" },
+      { "from": "CHECKPOINTED", "to": "CHECKPOINTED", "operation": "CHECKPOINT_CREATE" },
+      { "from": "CHECKPOINTED", "to": "BLOCKED", "operation": "BLOCK_RECORD" },
+      { "from": "CHECKPOINTED", "to": "INTERRUPTED", "operation": "INTERRUPT_RECORD" },
+      { "from": "CHECKPOINTED", "to": "FAILED", "operation": "FAILURE_RECORD" },
+      { "from": "CHECKPOINTED", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
+      { "from": "CHECKPOINTED", "to": "MERGE_PENDING", "operation": "MERGE_ELIGIBLE_RECORD" },
+      { "from": "CHECKPOINTED", "to": "RESOLVED", "operation": "CLOSE" },
+      { "from": "CHECKPOINTED", "to": "ARCHIVED", "operation": "ARCHIVE" },
+      { "from": "BLOCKED", "to": "ACTIVE", "operation": "UNBLOCK" },
+      { "from": "BLOCKED", "to": "FAILED", "operation": "FAILURE_RECORD" },
+      { "from": "BLOCKED", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
+      { "from": "BLOCKED", "to": "RESOLVED", "operation": "CLOSE" },
+      { "from": "BLOCKED", "to": "ARCHIVED", "operation": "ARCHIVE" },
+      { "from": "INTERRUPTED", "to": "ACTIVE", "operation": "RESUME" },
+      { "from": "INTERRUPTED", "to": "FAILED", "operation": "FAILURE_RECORD" },
+      { "from": "INTERRUPTED", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
+      { "from": "INTERRUPTED", "to": "RESOLVED", "operation": "CLOSE" },
+      { "from": "INTERRUPTED", "to": "ARCHIVED", "operation": "ARCHIVE" },
+      { "from": "FAILED", "to": "ACTIVE", "operation": "REOPEN" },
+      { "from": "FAILED", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
+      { "from": "FAILED", "to": "RESOLVED", "operation": "CLOSE" },
+      { "from": "FAILED", "to": "ARCHIVED", "operation": "ARCHIVE" },
+      { "from": "CONFLICTED", "to": "ACTIVE", "operation": "CONFLICT_RESOLVE" },
+      { "from": "CONFLICTED", "to": "FAILED", "operation": "FAILURE_RECORD" },
+      { "from": "CONFLICTED", "to": "RESOLVED", "operation": "CLOSE" },
+      { "from": "CONFLICTED", "to": "ARCHIVED", "operation": "ARCHIVE" },
+      { "from": "MERGE_PENDING", "to": "RESOLVED", "operation": "INTEGRATE_CLOSE" },
+      { "from": "MERGE_PENDING", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
+      { "from": "MERGE_PENDING", "to": "BLOCKED", "operation": "BLOCK_RECORD" },
+      { "from": "MERGE_PENDING", "to": "FAILED", "operation": "FAILURE_RECORD" },
+      { "from": "RESOLVED", "to": "ARCHIVED", "operation": "ARCHIVE" }
+    ],
+    "hard_forbidden": [
+      "into_NEW",
+      "out_of_ARCHIVED",
+      "self_edges_except_CHECKPOINTED_to_CHECKPOINTED",
+      "ACTIVE_to_ARCHIVED",
+      "MERGE_PENDING_to_ACTIVE",
+      "MERGE_PENDING_to_ARCHIVED",
+      "BLOCKED_to_INTERRUPTED",
+      "BLOCKED_to_MERGE_PENDING",
+      "BLOCKED_to_CHECKPOINTED",
+      "INTERRUPTED_FAILED_CONFLICTED_to_CHECKPOINTED",
+      "RESOLVED_exit_except_ARCHIVED",
+      "cross_job_transitions",
+      "mutation_of_job_contract_lane_writer_profile_namespace_fields",
+      "transitions_without_explicit_audited_approval_gated_operation"
+    ],
+    "checkpoint_rule_on_active_edges": {
+      "non_empty_store": "VALIDATE_TARGET_OWNERSHIP_AND_INTEGRITY_DEFAULT_LATEST_VALID",
+      "integrity_failure": "CHECKPOINT_INVALID",
+      "fallback_to_older_checkpoint": "FORBIDDEN",
+      "empty_store": "COLD_ENTRY_OR_COLD_RESUME_WITH_RECORDED_EVIDENCE",
+      "checkpointed_resume_never_cold": true,
+      "validation_never_mutates_checkpoints": true
+    }
+  },
+  "checkpoint": {
+    "id_template": "job:{job_id}:sessions:{session_key}:checkpoint:{checkpoint_seq}",
+    "seq_source": "PERSISTED_PER_RECOVERY_OBJECT",
+    "seq_starts_at": 0,
+    "seq_increment": 1,
+    "deterministic": true,
+    "forbidden_identity_sources": ["wall_clock", "randomness", "probabilistic_memory", "llm_output", "unordered_object_iteration", "machine_specific_path"],
+    "uniqueness": "STRUCTURAL_BY_TUPLE",
+    "identifier_parsed": false,
+    "ordering": "NUMERIC_ON_CHECKPOINT_SEQ",
+    "latest_valid": "MAX_CHECKPOINT_SEQ_PASSING_INTEGRITY",
+    "corrupted_max_seq_error": "CHECKPOINT_INVALID",
+    "fallback_to_older_checkpoint": "FORBIDDEN",
+    "immutable": true,
+    "append_only": true,
+    "no_repair_on_resume": true,
+    "duplicate_content": {
+      "result": "IDEMPOTENT_REPLAY",
+      "consumes_seq": false,
+      "writes_transition_record": false,
+      "changes_state": false,
+      "returns": "EXISTING_CHECKPOINT_ID",
+      "applies_transition": false
+    },
+    "ownership": {
+      "foreign_job_error": "FOREIGN_JOB_REJECT",
+      "foreign_session_error": "CHECKPOINT_OWNERSHIP_MISMATCH"
+    },
+    "integrity": {
+      "field": "payload_digest",
+      "validated_on_resume": true,
+      "failure_error": "CHECKPOINT_INVALID",
+      "silent_repair": "FORBIDDEN"
+    },
+    "state_consistency": {
+      "checkpointed_implies_store_non_empty": true,
+      "store_non_empty_implies_checkpointed": false,
+      "new_implies_empty_store": true,
+      "new_implies_checkpoint_seq_zero": true,
+      "store_append_only": true,
+      "resume_never_deletes_mutates_repairs_replaces": true,
+      "violation_error": "CHECKPOINT_INVALID"
+    },
+    "h08": {
+      "supplies_latest_valid_checkpoint": true,
+      "context_hydration_policy_ref": "context-hydration@1.0.1",
+      "scoring_changes": "NONE"
+    }
+  },
+  "namespaces": {
+    "allowed_write_roots": ["session_namespace"],
+    "session_namespace_root_template": "job:{job_id}:sessions",
+    "session_subtree_template": "job:{job_id}:sessions:{session_key}",
+    "session_subtree_layout": ["recovery/", "transitions/", "checkpoints/{seq}"],
+    "forbidden_write_roots": ["ledger_namespace", "runtime_state_namespace"],
+    "ledger_recovery_writes": "FORBIDDEN",
+    "ledger_rule": "job-isolation-v1.md section 13: no recovery state transitions in the ledger",
+    "phase_9b_boundaries": "PRESERVED_EXACTLY",
+    "phase_9b_schema_changes": "NONE"
+  },
+  "identity_preservation": {
+    "job_contract_fields": 8,
+    "job_contract_modified_by_9c": false,
+    "byte_identical_across_transitions": true,
+    "job_id_immutable": true,
+    "profile_preserved_by": "PER_TRANSITION_PHASE_9B_REVALIDATION",
+    "profile_drift_error": "PROFILE_BINDING_MISMATCH",
+    "session_identity": "OPAQUE_EXACT_MATCH",
+    "lane_writer_fields_mutated_by_9c": false,
+    "lane_conflict_errors": ["LANE_OWNERSHIP_CONFLICT", "CROSS_LANE_WRITE_REJECTED"],
+    "record_identity_immutable_after_create": true
+  },
+  "approval_model": {
+    "all_transitions_gated": true,
+    "gated_transition_count": 41,
+    "contract_alone_authorizes_execution": false,
+    "approval_system_authoritative": ["approval-gate", "safe-mode"],
+    "recording_operations": ["BLOCK_RECORD", "INTERRUPT_RECORD", "FAILURE_RECORD", "CONFLICT_RECORD"],
+    "recording_operations_restrict_only": true,
+    "recording_operations_targets": ["BLOCKED", "INTERRUPTED", "FAILED", "CONFLICTED"],
+    "recording_operations_still_gated": true,
+    "self_authorizing_recovery": "FORBIDDEN",
+    "archive_requires_user_confirmation": true,
+    "delete_class_used_by_9c": false,
+    "secret_access_used_by_9c": false,
+    "bypass_forbidden": ["approval_gate", "safe_mode", "security_checks", "project_root_boundaries"]
+  },
+  "conflict_evidence": {
+    "detection_authority": "PHASE_9B",
+    "entered_state": "CONFLICTED",
+    "entering_operation": "CONFLICT_RECORD",
+    "mapping": [
+      { "kind": "branch_divergence", "code": "STALE_MAIN_BASELINE" },
+      { "kind": "namespace_collision", "code": "NAMESPACE_COLLISION" },
+      { "kind": "lane_ownership_collision", "code": "LANE_OWNERSHIP_CONFLICT" },
+      { "kind": "job_identity_collision", "code": "JOB_ID_COLLISION" },
+      { "kind": "foreign_job_write_attempt", "code": "FOREIGN_NAMESPACE_WRITE_REJECTED" },
+      { "kind": "operational_merge_lock_conflict", "code": "MERGE_LOCK_REFERENCE" }
+    ],
+    "exits": ["ACTIVE", "FAILED", "RESOLVED", "ARCHIVED"]
+  },
+  "merge_pending": {
+    "eligibility_consumed_by_reference": true,
+    "eligibility_is_pure_decision": true,
+    "eligibility_authorizes_nothing": true,
+    "merge_executed_by_9c": false,
+    "integrate_close_requires": ["merge_applied_evidence", "post_merge_verification_evidence", "audited_synchronization_when_stale", "approval"],
+    "stale_baseline_error": "STALE_MAIN_BASELINE",
+    "auto_synchronization": "FORBIDDEN",
+    "stale_lane_authoritative_main": false,
+    "merge_time_conflict": "PHASE_9B_CODE_FIRST_THEN_CONFLICT_RECORD",
+    "merge_pending_conflict_identifier": "NOT_INTRODUCED",
+    "deferral_path": "MERGE_PENDING_to_BLOCKED",
+    "merge_lock": "EXTERNAL_GATE_SIGNAL_OWNED_BY_COMMAND_LAYER"
+  },
+  "validation_precedence": [
+    "P1_REQUEST_STRUCTURAL_VALIDATION:VALIDATION_ERROR",
+    "P2_PHASE_9B_JOB_CONTRACT_VALIDITY:PHASE_9B_LOCKED_ERRORS",
+    "P3_FOREIGN_JOB_AND_NAMESPACE_BOUNDARY:FOREIGN_JOB_REJECT|FOREIGN_NAMESPACE_WRITE_REJECTED",
+    "P4_RECORD_IDENTITY_VS_CALLER:RECOVERY_IDENTITY_MISMATCH",
+    "P5_PHASE_9B_LANE_AND_COORDINATION_AS_INVOKED_BY_OPERATION_CLASS:LANE_OWNERSHIP_CONFLICT|CROSS_LANE_WRITE_REJECTED|STALE_MAIN_BASELINE",
+    "P6_SAFE_MODE:POLICY_BLOCKED",
+    "P7_RECORD_PRESENT_SCHEMA_POLICY_REF:SESSION_RECOVERY_INVALID",
+    "P8_STATE_VALUE_WITHIN_CANONICAL_10:INVALID_RECOVERY_STATE",
+    "P9_REPLAY_GATE:IDEMPOTENT_REPLAY",
+    "P10_EDGE_LEGALITY_AND_FROM_STATE:ILLEGAL_TRANSITION",
+    "P11_EDGE_SPECIFIC_PRECONDITIONS:CHECKPOINT_OWNERSHIP_MISMATCH>CHECKPOINT_INVALID>RECOVERY_PRECONDITION_FAILED",
+    "P12_APPROVAL_GATE:RECOVERY_APPROVAL_REQUIRED",
+    "P13_ATOMIC_APPLY:NO_PARTIAL_EFFECT"
+  ],
+  "audit": {
+    "transition_record_fields": ["job_id", "session_key", "transition_seq", "from_state", "to_state", "operation", "arg_fingerprint", "evidence_refs", "approval_ref", "policy_ref", "outcome"],
+    "record_storage": "APPEND_ONLY_TRANSITIONS_SUBTREE",
+    "timestamps": "FORBIDDEN",
+    "append_only": true,
+    "immutable": true,
+    "transition_identity": ["job_id", "session_key", "transition_seq"],
+    "operation_fingerprint": "op:sha256(job_id|session_key|from_state|to_state|operation|arg_fingerprint)",
+    "arg_fingerprint_inputs": "CANONICAL_ARGUMENT_REFERENCE_FIELDS_ONLY",
+    "free_text_identity_input": false,
+    "immediate_identical_retry": "IDEMPOTENT_REPLAY",
+    "retry_after_intervening_transition": "ILLEGAL_TRANSITION",
+    "rejected_operations": "NO_STATE_CHANGE_NO_SEQ_CHANGE_NO_RECORD",
+    "exactly_one_record_per_applied_transition": true,
+    "atomic_apply": true,
+    "concurrent_loser_error": "ILLEGAL_TRANSITION",
+    "ledger_writes": "NONE"
+  },
+  "canonical_errors": [
+    "SESSION_RECOVERY_INVALID",
+    "INVALID_RECOVERY_STATE",
+    "ILLEGAL_TRANSITION",
+    "CHECKPOINT_OWNERSHIP_MISMATCH",
+    "CHECKPOINT_INVALID",
+    "RECOVERY_IDENTITY_MISMATCH",
+    "RECOVERY_PRECONDITION_FAILED",
+    "RECOVERY_APPROVAL_REQUIRED"
+  ],
+  "error_scopes": {
+    "SESSION_RECOVERY_INVALID": "RECORD_ABSENT_MALFORMED_OR_POLICY_REF_INCOMPATIBLE",
+    "INVALID_RECOVERY_STATE": "STATE_VALUE_OUTSIDE_CANONICAL_10",
+    "ILLEGAL_TRANSITION": "PAIR_NOT_ALLOWED_OR_FROM_STATE_MISMATCH_OR_FROM_ARCHIVED_OR_INTO_NEW_OR_DISALLOWED_SELF_EDGE",
+    "CHECKPOINT_OWNERSHIP_MISMATCH": "CHECKPOINT_OF_DIFFERENT_SESSION_SAME_JOB",
+    "CHECKPOINT_INVALID": "CHECKPOINT_ABSENT_OR_INTEGRITY_FAILURE_OR_CHECKPOINTED_WITH_EMPTY_STORE",
+    "RECOVERY_IDENTITY_MISMATCH": "CALLER_PAIR_DIFFERS_FROM_RECORD_OR_IDENTITY_TAMPERED",
+    "RECOVERY_PRECONDITION_FAILED": "EDGE_EVIDENCE_PRECONDITION_UNMET_NOT_MORE_SPECIFICALLY_CODED",
+    "RECOVERY_APPROVAL_REQUIRED": "GATED_TRANSITION_WITHOUT_OPERATION_LEVEL_APPROVAL"
+  },
+  "reused_errors": {
+    "phase_9b_locked_count": 18,
+    "phase_9b_modified": false,
+    "phase_9b_locked_errors": ["JOB_CONTRACT_INVALID", "INVALID_JOB_ID", "JOB_ID_COLLISION", "PROFILE_BINDING_INVALID", "PROFILE_BINDING_MISMATCH", "NAMESPACE_DERIVATION_FAILED", "NAMESPACE_OVERRIDE_FORBIDDEN", "NAMESPACE_COLLISION", "FOREIGN_JOB_REJECT", "FOREIGN_NAMESPACE_WRITE_REJECTED", "INVALID_KNOWLEDGE_SCOPE", "INVALID_EXECUTION_PERMISSIONS", "LANE_CONTRACT_INVALID", "LANE_ID_COLLISION", "LANE_OWNERSHIP_CONFLICT", "CROSS_LANE_WRITE_REJECTED", "COORDINATION_CHECKOUT_VIOLATION", "STALE_MAIN_BASELINE"],
+    "generic_taxonomy": ["VALIDATION_ERROR", "POLICY_BLOCKED"],
+    "merge_pending_conflict": "NOT_INTRODUCED",
+    "idempotent_replay_is_error": false
+  },
+  "determinism": {
+    "identical_inputs_produce": ["IDENTICAL_TRANSITION_OUTCOME", "IDENTICAL_ERROR_RESULT", "IDENTICAL_ENVELOPE"],
+    "forbidden_identity_sources": ["wall_clock", "randomness_after_persisted_creation", "probabilistic_memory", "llm_output", "unordered_object_iteration", "machine_specific_path"],
+    "fail_closed": ["unknown_state", "unknown_transition", "ambiguous_identity", "absent_or_malformed_record", "missing_or_corrupt_checkpoint"],
+    "fallback_scope": "NONE",
+    "silent_repair": "FORBIDDEN",
+    "silent_resume": "FORBIDDEN"
+  },
+  "context_hydration": {
+    "policy_ref": "context-hydration@1.0.1",
+    "frozen": true,
+    "h08_unchanged": true,
+    "scoring_changes": "NONE"
+  },
+  "phase_9b": {
+    "policy_ref": "job-isolation@1.0.0",
+    "contract": "governance/contracts/job-isolation-v1.md",
+    "unchanged": true,
+    "runtime_modifications": "NONE",
+    "acceptance": "40/40 VERIFIED UNCHANGED"
+  },
+  "acceptance_model": {
+    "total": 70,
+    "status": "DECLARED_NOT_EXECUTED",
+    "RC": ["RC01", "RC02", "RC03", "RC04", "RC05", "RC06", "RC07", "RC08"],
+    "ST": ["ST01", "ST02", "ST03", "ST04", "ST05", "ST06", "ST07", "ST08", "ST09", "ST10", "ST11", "ST12"],
+    "CP": ["CP01", "CP02", "CP03", "CP04", "CP05", "CP06", "CP07", "CP08", "CP09", "CP10"],
+    "ID": ["ID01", "ID02", "ID03", "ID04", "ID05", "ID06", "ID07"],
+    "IF": ["IF01", "IF02", "IF03", "IF04", "IF05", "IF06", "IF07"],
+    "MP": ["MP01", "MP02", "MP03", "MP04", "MP05", "MP06", "MP07", "MP08"],
+    "DI": ["DI01", "DI02", "DI03", "DI04", "DI05", "DI06", "DI07", "DI08"],
+    "SB": ["SB01", "SB02", "SB03", "SB04", "SB05", "SB06", "SB07", "SB08", "SB09", "SB10"],
+    "runner_shape": "EXPLICIT_REGISTRY_ALL_REQUIRED_SKIPPED_ZERO_NONZERO_EXIT_ON_FAILURE",
+    "note": "Declarations for future 9C-07 execution. Not runtime acceptance executions. No ID is authoritative before contract lock."
+  },
+  "non_claims": {
+    "phase_9c_verified": false,
+    "runtime": "NONE",
+    "architecture_freeze": "NOT_CLAIMED",
+    "production_readiness": "NOT_PROVEN",
+    "acceptance_executed": false
+  },
+  "public_artifact_constraints": {
+    "forbidden_content": ["client_data", "pgn_data", "credentials", "secret_profiles", "runtime_auth_state", "private_personal_memory", "opencode_db", "browser_profiles", "machine_specific_evidence", "machine_specific_runtime_databases", "machine_specific_absolute_paths"],
+    "recovery_state_storage": "LOCAL_ONLY_STATE_SESSIONS_IGNORED",
+    "tracked_artifacts": "CONTRACT_POLICY_ARCHITECTURE_ADRS_FUTURE_TESTS_ONLY"
+  }
+}
