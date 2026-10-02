@@ -1,6 +1,6 @@
 # ADR-0001: Session Recovery State Machine Topology (41-Edge Allow-List, Terminality)
 
-Status: Accepted — locked with session-recovery@1.0.0
+Status: Accepted — locked with session-recovery@1.0.0; unchanged and reaffirmed under session-recovery@1.0.1
 Related: governance/contracts/session-recovery-v1.md sections 5-6; Epic #17; Phase 9C-01 discovery; Phase 9C governance review
 
 ## Context

@@ -1,11 +1,20 @@
 # Session Recovery v1 — Governance Contract
 
 Status: CONTRACT LOCKED
-Policy: session-recovery@1.0.0
+Policy: session-recovery@1.0.1
+Policy Version: 1.0.1
+Policy Ref: session-recovery@1.0.1
+Supersedes: session-recovery@1.0.0 (initial merged contract, PR #53)
+Supersession Reason: Post-merge governance review corrections — P1 deterministic
+idempotency precedence for duplicate checkpoint retry; P2a START cold-entry
+resolution; P2b architecture diagram accuracy. The 10 states, the 41-edge
+allow-list, the 8 canonical errors, P1-P13, and the 70 acceptance IDs are
+unchanged.
 Implementation: NONE
 Phase: 9C (Session Recovery)
 Epic: #17
-Governance issues: 9C-01 (discovery + governance review), 9C-02 (contract lock)
+Governance issues: 9C-01 (discovery + governance review), 9C-02 (contract lock),
+9C-02 review-findings fix-forward
 
 Acceptance model: DECLARED — 70 invariants, not executed. Acceptance evidence
 file docs/acceptance/phase-9c.md belongs to the future acceptance phase and does
@@ -62,7 +71,7 @@ Core principle (repository-declared, Epic #17): No silent recovery.
 | Terminal state | A state with zero allowed outgoing edges. ARCHIVED is the sole terminal state. |
 | Checkpoint | An immutable artifact storing a canonical payload and its `payload_digest`, identified by `checkpoint_id`. |
 | Latest valid checkpoint | The checkpoint with the maximum `checkpoint_seq` that passes integrity validation. |
-| Cold entry / cold resume | An `->ACTIVE` transition with zero checkpoints in store, recorded explicitly with evidence. |
+| Cold entry / cold resume | An `->ACTIVE` transition with zero checkpoints in store, recorded explicitly: `START` cold entry is recorded by its own applied transition record (sections 6.5-6.6); re-entry cold entry/resume additionally requires the edge evidence reference of section 6.5. |
 | Evidence reference | A canonical non-empty reference identifier recorded in a transition record; free-text bodies are never identity inputs. |
 | Replay | An operation identical to the most recently applied transition `(from_state, to_state, operation, arg_fingerprint)`; returns `IDEMPOTENT_REPLAY`. |
 | Canonical error | A locked UPPER_SNAKE identifier returned by fail-closed validation. |
@@ -91,7 +100,7 @@ Fields, exact, canonical order:
 3. current_state
 4. transition_seq      (monotonic integer, starts 0)
 5. checkpoint_seq      (monotonic integer, starts 0)
-6. policy_ref          (session-recovery@1.0.0)
+6. policy_ref          (session-recovery@1.0.1)
 ```
 
 Unknown fields FAIL CLOSED with `SESSION_RECOVERY_INVALID`. No timestamps,
@@ -230,8 +239,8 @@ RESOLVED -> ARCHIVED : ARCHIVE
 
 | Operation(s) | Additional evidence precondition (beyond global P1-P13) |
 |---|---|
-| `START` | none (JobContract validity + approval apply) |
-| `CHECKPOINT_CREATE` | canonical payload; `payload_digest` computable; payload is a new checkpoint for this object (duplicate content is `IDEMPOTENT_REPLAY`, section 8.4, and applies no transition) |
+| `START` | none — explicitly exempt from the cold-entry evidence requirement (JobContract validity at P2 + approval at P12 apply). The store is empty by invariant I2, and the applied START transition record is itself the recorded cold entry of section 6.6; no separate cold-entry evidence reference exists for START. P11 resolves START to exactly one deterministic outcome: pass (`RECOVERY_PRECONDITION_FAILED` is not producible by START) |
+| `CHECKPOINT_CREATE` | canonical payload; `payload_digest` computable; payload is a new checkpoint for this object — duplicate content is evaluated here at P11 (after P9 and P10, before P12) and is `IDEMPOTENT_REPLAY`, section 8.4, applying no transition |
 | `RESUME` (from CHECKPOINTED) | target checkpoint exists (store non-empty by invariant I1), owned by the pair, integrity-valid; default target is latest valid; explicit `checkpoint_id` must validate |
 | `RESUME` (from INTERRUPTED), `REOPEN`, `CONFLICT_RESOLVE`, `UNBLOCK` | validate latest checkpoint if the store is non-empty; if the store is empty, cold entry/resume is allowed only with recorded cold-entry evidence |
 | `BLOCK_RECORD` | block reason reference |
@@ -249,9 +258,18 @@ RESOLVED -> ARCHIVED : ARCHIVE
   or an explicitly supplied `checkpoint_id`) is validated for ownership and
   integrity before entry. Integrity failure fails closed with
   `CHECKPOINT_INVALID`; there is no fallback to an older checkpoint.
-- If the store is empty, entry is allowed only as recorded cold entry
-  (`START`, `UNBLOCK`) or recorded cold resume (`RESUME`, `REOPEN`,
-  `CONFLICT_RESOLVE`).
+  This branch is unreachable for `START`: `NEW` implies an empty store (I2).
+- If the store is empty, entry is allowed as recorded cold entry or recorded
+  cold resume, with exactly one deterministic rule per edge class:
+  - `START` (first entry from NEW): always cold by invariant I2. START is
+    explicitly exempt from the separate cold-entry evidence reference (6.5);
+    the applied START transition record — after JobContract validity at P2
+    and approval at P12 — is itself the recorded cold entry. P11 for START
+    therefore has exactly one outcome: pass.
+  - re-entry edges (`UNBLOCK`, `RESUME` from INTERRUPTED, `REOPEN`,
+    `CONFLICT_RESOLVE`): allowed only with the recorded cold-entry /
+    cold-resume evidence reference of section 6.5; missing evidence fails
+    closed with `RECOVERY_PRECONDITION_FAILED` at P11.
 - `CHECKPOINTED -> ACTIVE` can never be cold: invariant I1 guarantees a
   non-empty store.
 - Validation never deletes, mutates, repairs, or replaces a checkpoint.
@@ -292,7 +310,12 @@ P10  edge legality: (from_state, to_state) in the 41-edge allow-list AND
 P11  edge-specific preconditions, in this order:
        checkpoint ownership -> CHECKPOINT_OWNERSHIP_MISMATCH
        checkpoint integrity/availability -> CHECKPOINT_INVALID
-       edge evidence (section 6.5) -> RECOVERY_PRECONDITION_FAILED
+       edge evidence (section 6.5) -> RECOVERY_PRECONDITION_FAILED;
+       for CHECKPOINT_CREATE, edge evidence first evaluates duplicate
+       checkpoint content (section 8.4) -> IDEMPOTENT_REPLAY
+       short-circuit: existing checkpoint_id returned, no checkpoint_seq
+       consumed, no transition record, no state change, no approval
+       required (nothing is applied, so P12 does not attach)
 P12  approval gate (operation-level approval evidence)
      -> RECOVERY_APPROVAL_REQUIRED
 P13  atomic apply: state update and transition record commit together,
@@ -303,6 +326,13 @@ Phase 9B checks (P2-P5) always precede Phase 9C checks: isolation outranks
 state semantics. Identity (P4) precedes state semantics (P7-P10). Replay (P9)
 precedes legality (P10). Approval (P12) is the final gate before apply.
 A rejected operation changes nothing: no state, no sequence, no record.
+
+The two idempotency mechanisms never compete and their precedence is exact:
+P9 is transition-head-scoped (identical to the most recently applied
+transition only, section 14.3); the duplicate-content dedup is
+checkpoint-store-scoped (section 8.4) and is evaluated only after P9 does not
+fire and P10 passes. A request can short-circuit at P9 first; otherwise the
+dedup is reached at P11. Both return the result class `IDEMPOTENT_REPLAY`.
 
 ### 7.2 Global postconditions (applied transitions only)
 
@@ -366,6 +396,32 @@ checkpoint_id = job:{job_id}:sessions:{session_key}:checkpoint:{checkpoint_seq}
   exactly one new checkpoint.
 - Different payload: `checkpoint_seq += 1`, new `checkpoint_id`, exactly one
   transition record.
+- Exact evaluation precedence (normative — no rule overlap): the head-scoped
+  replay gate P9 (section 14.3) is evaluated first. If P9 does not fire, edge
+  legality P10 must pass; an intervening transition that no longer satisfies
+  `from_state` fails there with `ILLEGAL_TRANSITION` and never reaches this
+  section. Only after P10 is duplicate content evaluated, at P11, before P12.
+- Duplicate checkpoint content therefore remains idempotent after any number
+  of intervening transitions whenever P10 passes: the content comparison is
+  checkpoint-store-scoped, not transition-head-scoped. The dedup short-circuit
+  requires no approval (P12) because it applies no transition and changes
+  nothing.
+- Deterministic outcomes for `CHECKPOINT_CREATE`:
+  a) immediate identical retry of the most recently applied transition
+     -> P9 fires -> `IDEMPOTENT_REPLAY` (original transition record returned,
+     `transition_seq` unchanged, original `checkpoint_id` in the result).
+  b) same payload after an intervening transition, current state still the
+     edge's `from_state` (e.g. `CHECKPOINT_CREATE(A) -> RESUME ->
+     CHECKPOINT_CREATE(A)` with state ACTIVE) -> P9 does not fire, P10 passes,
+     P11 dedup matches -> `IDEMPOTENT_REPLAY` with the existing
+     `checkpoint_id`, no `checkpoint_seq` consumed, no transition record, no
+     state change (state stays ACTIVE), no approval required. This is NOT
+     `ILLEGAL_TRANSITION`.
+  b') same attempt while the current state no longer satisfies `from_state`
+     -> P10 -> `ILLEGAL_TRANSITION`, zero state change, no record.
+  c) new payload, all preconditions and approval satisfied -> applied:
+     `checkpoint_seq += 1`, state `-> CHECKPOINTED`, exactly one transition
+     record.
 
 ### 8.5 State/store consistency invariants
 
@@ -518,7 +574,7 @@ the recorded detection then enters CONFLICTED from the current state):
   arg_fingerprint,    (deterministic hash of canonical argument fields)
   evidence_refs[],    (canonical reference identifiers)
   approval_ref,       (canonical approval reference)
-  policy_ref,         (session-recovery@1.0.0)
+  policy_ref,         (session-recovery@1.0.1)
   outcome             (APPLIED)
 }
 ```
@@ -542,8 +598,17 @@ No timestamps. No randomness. No machine-specific paths.
   `(from_state, to_state, operation, arg_fingerprint)` returns
   `IDEMPOTENT_REPLAY`: the original record is returned, `transition_seq` is
   unchanged, no second record is written, no approval is required (P9).
-- A retry after an intervening transition fails with `ILLEGAL_TRANSITION`
-  (P10): deterministic, no state change, no record.
+- A retry after an intervening transition is **not** a P9 replay: the head no
+  longer matches, so the request re-enters normal evaluation at P10. It fails
+  with `ILLEGAL_TRANSITION` (P10) **if and only if** the current state no
+  longer satisfies `from_state`, or the pair is not allow-listed: zero state
+  change, no record. If `from_state` still holds (e.g. a same-payload
+  `CHECKPOINT_CREATE` after a `CHECKPOINTED -> ACTIVE` RESUME), evaluation
+  continues to P11, where duplicate checkpoint content remains
+  `IDEMPOTENT_REPLAY` (section 8.4) regardless of the intervening
+  transition. This scoping is exact: "retry after intervening transition ->
+  `ILLEGAL_TRANSITION`" is never itself a rule; `ILLEGAL_TRANSITION` comes
+  only from the P10 conditions in section 15.
 - Rejected operations write no record and do not change `state` or any
   sequence; identical inputs re-derive the identical error.
 - Exactly one transition record exists per applied transition; records are
@@ -577,7 +642,7 @@ Exact scopes:
 | CHECKPOINT_OWNERSHIP_MISMATCH | Referenced checkpoint belongs to a different session of the same job (cross-job never reaches this error: P3 returns `FOREIGN_JOB_REJECT` first). |
 | CHECKPOINT_INVALID | Checkpoint reference absent; payload digest/integrity failure; missing `checkpoint_seq`; or CHECKPOINTED with an empty checkpoint store. |
 | RECOVERY_IDENTITY_MISMATCH | Caller `(job_id, session_key)` differs from the RecoveryObject identity (same job), or record identity fields are tampered. |
-| RECOVERY_PRECONDITION_FAILED | Edge-specific evidence precondition unmet and not covered by a more specific code (block-clearance, failure-evidence, closure-evidence, conflict-resolution, merge-applied/post-merge-verification evidence; merge lock held at ARCHIVE; fresh eligibility decision absent at MERGE_ELIGIBLE_RECORD; recorded cold-entry/cold-resume evidence missing). |
+| RECOVERY_PRECONDITION_FAILED | Edge-specific evidence precondition unmet and not covered by a more specific code (block-clearance, failure-evidence, closure-evidence, conflict-resolution, merge-applied/post-merge-verification evidence; merge lock held at ARCHIVE; fresh eligibility decision absent at MERGE_ELIGIBLE_RECORD; recorded cold-entry/cold-resume evidence missing on a re-entry edge — `START` carries no cold-entry evidence precondition, sections 6.5-6.6). |
 | RECOVERY_APPROVAL_REQUIRED | Gated transition attempted while operation-level approval evidence is missing (P12). |
 
 Rules:
@@ -660,7 +725,7 @@ RC02 recovery record strict schema: exact fields; unknown field -> SESSION_RECOV
 RC03 CREATE idempotent on exact (job_id, session_key); policy_ref version skew -> SESSION_RECOVERY_INVALID; no repair
 RC04 one record per pair; record identity fields immutable post-create; tamper fails closed
 RC05 absent record -> SESSION_RECOVERY_INVALID; unknown state value -> INVALID_RECOVERY_STATE; no fallback/default
-RC06 policy_ref session-recovery@1.0.0 bound on record and every result envelope
+RC06 policy_ref session-recovery@1.0.1 bound on record and every result envelope
 RC07 100x identical create/validate produce byte-identical outputs
 RC08 record scope = (job_id, session_key); same-job cross-session access -> RECOVERY_IDENTITY_MISMATCH
 ```
@@ -693,7 +758,8 @@ CP01 checkpoint_id deterministic from (job_id, session_key, checkpoint_seq); 100
 CP02 no wall clock/randomness/LLM/machine-path in checkpoint identity (source scan + derivation)
 CP03 checkpoint_seq monotonic +1 per new checkpoint; no id issued twice for a tuple
 CP04 ordering: latest valid = maximum checkpoint_seq passing integrity; deterministic across 100x
-CP05 duplicate content -> IDEMPOTENT_REPLAY: existing id returned, no seq consumed,
+CP05 duplicate content (evaluated at P11 after P9/P10, valid regardless of
+    intervening transitions) -> IDEMPOTENT_REPLAY: existing id returned, no seq consumed,
     no record, no state change
 CP06 resume integrity: digest mismatch/absent reference -> CHECKPOINT_INVALID; no silent repair
 CP07 latest-valid: corrupt maximum-seq checkpoint -> CHECKPOINT_INVALID; never fallback
@@ -761,8 +827,10 @@ MP08 non-merge closures use CLOSE from the six non-merge states; INTEGRATE_CLOSE
 
 ```text
 DI01 100x identical transition battery -> identical outcomes, errors, envelopes
-DI02 replay: immediate identical retry -> IDEMPOTENT_REPLAY + original record + unchanged seq
-    + no second record; retry after intervening transition -> ILLEGAL_TRANSITION with zero state change
+DI02 replay: immediate identical retry of the most recently applied transition -> IDEMPOTENT_REPLAY
+    + original record + unchanged seq + no second record; a retry after an intervening transition
+    re-enters P10 -> ILLEGAL_TRANSITION iff the current state no longer satisfies from_state (zero
+    state change); if from_state still holds, duplicate checkpoint content -> IDEMPOTENT_REPLAY per CP05/section 8.4
 DI03 exactly one record per applied transition; seq unique, monotonic, append-only across
     long batteries
 DI04 rejected ops: no record, no seq change; identical inputs re-derive identical error (100x)
@@ -803,7 +871,9 @@ Determinism stress uses fixed 100x repeats; suite sources must contain no
 ## 21. Implementation Status and Non-Claims
 
 - Status: CONTRACT LOCKED.
-- Policy: session-recovery@1.0.0.
+- Policy: session-recovery@1.0.1 (supersedes 1.0.0; see header
+  Supersession Reason — review-findings correction, no allow-list/error/
+  acceptance-count change).
 - Implementation: NONE — no `runtime/session-recovery/*` module exists; no
   runtime child issues created by this act.
 - Acceptance: DECLARED, not executed — 70 invariants;

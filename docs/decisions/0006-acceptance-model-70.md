@@ -1,6 +1,6 @@
 # ADR-0006: Phase 9C Acceptance Model — 70 Declared Invariants
 
-Status: Accepted — locked with session-recovery@1.0.0
+Status: Accepted — locked with session-recovery@1.0.0; unchanged and reaffirmed under session-recovery@1.0.1
 Related: governance/contracts/session-recovery-v1.md section 20; job-isolation-v1.md section 28
 
 ## Context

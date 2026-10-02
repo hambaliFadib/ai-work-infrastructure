@@ -1,6 +1,6 @@
 # ADR-0002: RecoveryObject Identity and Namespace Home
 
-Status: Accepted — locked with session-recovery@1.0.0
+Status: Accepted — locked with session-recovery@1.0.0; unchanged and reaffirmed under session-recovery@1.0.1
 Related: governance/contracts/session-recovery-v1.md sections 4, 9, 10; job-isolation-v1.md sections 9, 13, 14
 
 ## Context
