@@ -34,12 +34,26 @@ identity axis.
    byte-identical across every transition; `job_id`, `profile`, session
    identity, namespace fields, and lane/writer fields are never mutated by
    9C (contract section 9).
+6. **policy_ref compatibility:** persisted-record compatibility is
+   exact-current — a persisted RecoveryObject must carry exactly
+   `session-recovery@1.0.1`, the sole compatible value. A persisted record
+   carrying the superseded `session-recovery@1.0.0` ref is incompatible with
+   the current policy and fails closed with `SESSION_RECOVERY_INVALID`
+   (contract sections 4.1/4.3, P7). No implicit migration exists: 9C never
+   rewrites, rebinds, repairs, or aliases a persisted ref, never
+   auto-migrates persisted records, and never creates a replacement record.
+   Any migration from a superseded persisted policy version is explicitly
+   out of scope here; it requires a separate, reviewed governance change
+   with its own versioning and acceptance.
 
 ## Consequences
 
 - No Phase 9B contract, policy, or runtime change is required or allowed for
   9C storage: 9B defines namespace roots, 9C owns its internal layout under
   them.
+- Superseded-ref persisted records (`session-recovery@1.0.0`) are rejected
+  fail-closed (`SESSION_RECOVERY_INVALID`); no compatibility window, alias,
+  or in-place migration path exists.
 - Foreign-job/session access reuses Phase 9B errors unchanged
   (`FOREIGN_JOB_REJECT`, `FOREIGN_NAMESPACE_WRITE_REJECTED`,
   `NAMESPACE_OVERRIDE_FORBIDDEN`).

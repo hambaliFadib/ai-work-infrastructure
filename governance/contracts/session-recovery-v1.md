@@ -107,6 +107,28 @@ Unknown fields FAIL CLOSED with `SESSION_RECOVERY_INVALID`. No timestamps,
 no random values, no machine-specific content. A future schema extension
 requires an explicit `session-recovery` policy version change.
 
+### 4.3 Persisted policy_ref compatibility
+
+- Current policy ref: a persisted RecoveryObject must carry exactly
+  `session-recovery@1.0.1`. Compatibility is exact-current: the sole
+  compatible value is the exact current ref; there is no version range, no
+  alias, and no compatibility window.
+- Superseded ref: a persisted RecoveryObject carrying
+  `session-recovery@1.0.0` is incompatible with the current policy.
+- Result: reading or validating a superseded-policy record under 1.0.1 fails
+  closed at P7 with `SESSION_RECOVERY_INVALID` — identical to every other
+  `policy_ref` mismatch (sections 4.1 and 15).
+- No implicit migration: 9C never rewrites `policy_ref`, never rebinds
+  `@1.0.0` to `@1.0.1`, never repairs or rewrites the record, never aliases
+  the superseded ref, never auto-migrates persisted records, and never
+  creates a replacement RecoveryObject.
+- `session-recovery@1.0.0` had Implementation: NONE; no historical runtime
+  migration event exists and none is asserted.
+- Future migration: any migration from a superseded persisted policy version
+  is a separate, explicit, reviewed governance change with its own versioning
+  and acceptance. It is not part of 9C-02 or this review-findings
+  clarification, and no migration path exists under 1.0.1.
+
 ## 5. State Model
 
 Exactly these 10 states, in declared order:

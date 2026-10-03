@@ -21,6 +21,20 @@
       "policy_ref_mismatch_error": "SESSION_RECOVERY_INVALID",
       "identity_immutable_after_creation": true
     },
+    "persisted_policy_ref_compatibility": {
+      "mode": "EXACT_CURRENT_POLICY_REF",
+      "current_policy_ref": "session-recovery@1.0.1",
+      "superseded_policy_refs": ["session-recovery@1.0.0"],
+      "superseded_record_result": "SESSION_RECOVERY_INVALID",
+      "superseded_1_0_0_implementation": "NONE",
+      "historical_runtime_migration_event": "NONE",
+      "automatic_migration": "FORBIDDEN",
+      "implicit_rebind_or_alias": "FORBIDDEN",
+      "record_rewrite_or_repair": "FORBIDDEN",
+      "replacement_record_creation": "FORBIDDEN",
+      "migration_requires": "EXPLICIT_FUTURE_GOVERNANCE_CHANGE_WITH_OWN_VERSIONING_AND_ACCEPTANCE",
+      "migration_in_scope_for_9c_02": false
+    },
     "session_key": {
       "kind": "OPAQUE_CANONICAL_SESSION_IDENTITY",
       "normalization": "NONE",
