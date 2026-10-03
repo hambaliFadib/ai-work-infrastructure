@@ -10,7 +10,7 @@ idempotency precedence for duplicate checkpoint retry; P2a START cold-entry
 resolution; P2b architecture diagram accuracy. The 10 states, the 41-edge
 allow-list, the 8 canonical errors, P1-P13, and the 70 acceptance IDs are
 unchanged.
-Implementation: NONE
+Implementation: PARTIAL (9C-03 core)
 Phase: 9C (Session Recovery)
 Epic: #17
 Governance issues: 9C-01 (discovery + governance review), 9C-02 (contract lock),
@@ -896,8 +896,11 @@ Determinism stress uses fixed 100x repeats; suite sources must contain no
 - Policy: session-recovery@1.0.1 (supersedes 1.0.0; see header
   Supersession Reason — review-findings correction, no allow-list/error/
   acceptance-count change).
-- Implementation: NONE — no `runtime/session-recovery/*` module exists; no
-  runtime child issues created by this act.
+- Implementation: PARTIAL (9C-03 core) — `runtime/session-recovery/core/`
+  implements RecoveryObject identity, strict schema, CREATE/idempotency,
+  policy_ref enforcement, checkpoint identity/sequence/dedup, latest-valid
+  resolution, and ownership verification. No transition engine, no lifecycle
+  operations (9C-04+).
 - Acceptance: DECLARED, not executed — 70 invariants;
   docs/acceptance/phase-9c.md does not exist yet.
 - Phase 9C: NOT VERIFIED.

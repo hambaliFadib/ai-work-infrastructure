@@ -5,7 +5,7 @@
   "supersedes": "session-recovery@1.0.0",
   "supersession_reason": "Post-merge governance review corrections: P1 deterministic idempotency precedence for duplicate checkpoint retry (head replay P9 vs content dedup P11), P2a START cold-entry resolution (START exempt; applied START transition record is the recorded cold entry), P2b architecture diagram accuracy. States (10), allow-list (41), canonical errors (8), P1-P13, and acceptance IDs (70) unchanged.",
   "status": "CONTRACT_LOCKED",
-  "implementation_status": "NONE",
+  "implementation_status": "PARTIAL (9C-03)",
   "phase": "9C",
   "epic": 17,
   "description": "Normative governance contract for Session Recovery v1: 10-state recovery model, 41-edge allow-list transitions, RecoveryObject identity, immutable append-only checkpoint model, approval-gated transitions, canonical fail-closed errors, and the declared Phase 9C acceptance model. Implementation status: NONE - no runtime module exists; acceptance DECLARED, not executed; Phase 9C NOT VERIFIED.",
@@ -376,7 +376,7 @@
   },
   "non_claims": {
     "phase_9c_verified": false,
-    "runtime": "NONE",
+    "runtime": "PARTIAL (9C-03)",
     "architecture_freeze": "NOT_CLAIMED",
     "production_readiness": "NOT_PROVEN",
     "acceptance_executed": false

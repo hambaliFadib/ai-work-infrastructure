@@ -1,7 +1,7 @@
 # Session Recovery — Architecture Document
 
 Status: CONTRACT LOCKED
-RUNTIME IMPLEMENTATION: NONE
+RUNTIME IMPLEMENTATION: PARTIAL (9C-03 core)
 Phase 9C: CONTRACT LOCKED / NOT VERIFIED
 Policy: session-recovery@1.0.1
 Phase: 9C
@@ -158,16 +158,24 @@ ignored); tracked artifacts are governance documents only.
 
 ## 5. Implementation Status
 
-CONTRACT LOCKED. RUNTIME IMPLEMENTATION: NONE. PHASE 9C: NOT
+CONTRACT LOCKED. RUNTIME IMPLEMENTATION: PARTIAL (9C-03). PHASE 9C: NOT
 VERIFIED.
 
-Implemented:
-- none (no `runtime/session-recovery/*` module; no runtime child issues
-  created by the contract-lock act)
+Implemented (9C-03):
+- `runtime/session-recovery/core/recovery-object.js` — RecoveryObject
+  identity, strict schema validation, CREATE/idempotency, policy_ref
+  enforcement, tamper detection.
+- `runtime/session-recovery/core/checkpoint.js` — Checkpoint identity
+  derivation, monotonic sequence, latest-valid resolution, duplicate-content
+  idempotency, ownership verification.
+- `runtime/session-recovery/core/index.js` — Deterministic facade combining
+  RecoveryObject + Checkpoint into a single module API.
+- `runtime/tests/session-recovery/` — 40 integration test cases covering
+  the locked Phase 9C-03 semantics. 3 suites, all passing.
 
-Pending:
-- runtime core, transition engine, integration, approval/security
-  enforcement, acceptance suite (future child issues after lock)
+Pending (9C-04+):
+- transition engine, lifecycle operations (START, RESUME, CLOSE, ARCHIVE),
+  approval/security enforcement, acceptance suite (future child issues)
 
 Acceptance:
 - DECLARED, not executed — 70 invariants (RC01-RC08, ST01-ST12, CP01-CP10,
