@@ -1,6 +1,6 @@
 # ADR-0004: Approval Model, Canonical 9C Error Vocabulary, and Validation Precedence
 
-Status: Accepted — locked with session-recovery@1.0.0
+Status: Accepted — locked with session-recovery@1.0.0; unchanged and reaffirmed under session-recovery@1.0.1
 Related: governance/contracts/session-recovery-v1.md sections 7, 11, 15; job-isolation-v1.md sections 16, 22, 23; governance/schemas/error-taxonomy.json
 
 ## Context

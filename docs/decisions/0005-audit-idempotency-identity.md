@@ -1,6 +1,6 @@
 # ADR-0005: Transition Audit Record, Two-Layer Identity, and Idempotency Semantics
 
-Status: Accepted — locked with session-recovery@1.0.0
+Status: Accepted — locked with session-recovery@1.0.0; corrected under session-recovery@1.0.1 (post-merge review: retry-after-intervening-transition scoping)
 Related: governance/contracts/session-recovery-v1.md section 14; job-isolation-v1.md sections 13, 24
 
 ## Context
@@ -30,8 +30,16 @@ recovery transitions into the Phase 9B ledger (contract section 13).
 3. **Replay gate (P9, before legality P10):** an operation identical to the
    *most recently applied* transition returns `IDEMPOTENT_REPLAY` — original
    record returned, `transition_seq` unchanged, no second record, no approval
-   required. A retry after an intervening transition fails
-   `ILLEGAL_TRANSITION` with zero state change.
+   required. A retry after an intervening transition is **not** a P9 replay
+   and re-enters normal evaluation at P10: it fails `ILLEGAL_TRANSITION` if
+   and only if the current state no longer satisfies `from_state` (zero state
+   change, no record). If `from_state` still holds — e.g. a same-payload
+   `CHECKPOINT_CREATE` after `CHECKPOINTED -> ACTIVE` RESUME — evaluation
+   continues to P11, where duplicate checkpoint content remains
+   `IDEMPOTENT_REPLAY` (contract section 8.4) regardless of intervening
+   transitions. "Retry after intervening transition -> `ILLEGAL_TRANSITION`"
+   is therefore not a standalone rule; `ILLEGAL_TRANSITION` originates only
+   from the P10 conditions (1.0.1 correction).
 4. **Rejected operations** write no record and change neither state nor any
    sequence; identical inputs re-derive the identical error. Concurrent or
    stale losers observe the advanced `from_state` and fail

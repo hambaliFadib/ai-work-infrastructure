@@ -127,7 +127,7 @@ policy:     job-isolation@1.0.0 — CONTRACT_LOCKED / PARTIAL
 ```text
 epic:     #17 status:blocked
 children: 0
-policy:   session-recovery@1.0.0 — CONTRACT LOCKED (9C-02) / runtime NONE / acceptance DECLARED / NOT VERIFIED
+policy:   session-recovery@1.0.1 (supersedes 1.0.0) — CONTRACT LOCKED (9C-02 + review corrections) / runtime NONE / acceptance DECLARED / NOT VERIFIED
 ```
 
 ## Not yet activated

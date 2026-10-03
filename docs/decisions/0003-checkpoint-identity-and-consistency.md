@@ -1,6 +1,6 @@
 # ADR-0003: Checkpoint Identity, Ordering, and One-Directional State Consistency
 
-Status: Accepted — locked with session-recovery@1.0.0
+Status: Accepted — locked with session-recovery@1.0.0; corrected under session-recovery@1.0.1 (post-merge review: duplicate-content evaluation precedence)
 Related: governance/contracts/session-recovery-v1.md section 8; Phase 9C governance review correction round
 
 ## Context
@@ -32,7 +32,13 @@ choose ONE identity strategy and the correct consistency invariant.
    `IDEMPOTENT_REPLAY` — existing id returned, no seq consumed, no transition
    record, no state change; a duplicate-content `CHECKPOINT_CREATE` never
    applies a transition, so an applied entry into CHECKPOINTED always appends
-   exactly one checkpoint.
+   exactly one checkpoint. **Evaluation precedence (1.0.1 correction):** the
+   transition-head replay gate P9 is evaluated first; if it does not fire, P10
+   must pass (an intervening transition that no longer satisfies `from_state`
+   fails there with `ILLEGAL_TRANSITION`); duplicate content is then evaluated
+   at P11, before P12. Content dedup is content-scoped, not head-scoped: it
+   remains idempotent after any number of intervening transitions whenever P10
+   passes, needs no approval (nothing is applied), and applies no transition.
 5. **One-directional consistency invariant (the correction):**
    - I1 `CHECKPOINTED => store non-empty` (empty store while CHECKPOINTED
      fails `CHECKPOINT_INVALID`);

@@ -3,7 +3,7 @@
 Status: CONTRACT LOCKED
 RUNTIME IMPLEMENTATION: NONE
 Phase 9C: CONTRACT LOCKED / NOT VERIFIED
-Policy: session-recovery@1.0.0
+Policy: session-recovery@1.0.1
 Phase: 9C
 Epic: #17
 
@@ -43,23 +43,43 @@ transition. No silent recovery.
 ## 2. State Model (Conceptual)
 
 ```text
-                 +--------------------------------------+
-                 |            (41-edge allow-list)      |
-                 v                                      |
-NEW --> ACTIVE <--> CHECKPOINTED --> BLOCKED ----+       |
- |        |  \          |            |          |       |
- |        |   \         |            v          v       |
- |        |    +------> RESOLVED <---+----- INTERRUPTED  |
- |        |              |           |          |       |
- |        |              |        FAILED <------+       |
- |        |              |          |                    |
- |        |              v          v                    |
- |        +---------> ARCHIVED <-- CONFLICTED <--+       |
- |                         ^          |          |       |
- +----> ARCHIVED           |          v          |       |
-      (terminal)           +----- MERGE_PENDING -+-------+
+NEW \
+|    \
+|     v
+|     ACTIVE --CHECKPOINT_CREATE--> CHECKPOINTED
+|     ACTIVE <--RESUME------------- CHECKPOINTED
+|       |                                 |  \
+|ARCHIVE| record ops         v------------+   \
+|   +-------------------------+                \
+|   | BLOCKED   INTERRUPTED   |                 |
+|   | FAILED    CONFLICTED    |                 |
+|   | MERGE_PENDING           |                 |
+|   +---------|---------|-----+                 |
+|             v         |                       |
+|         +---------+   |                       |
+|         | RESOLVED|   |                       |
+|         +----|----+   |                       |
+|              |ARCHIVE | ARCHIVE               | ARCHIVE
+|              |        |                       |
++--------------+--------+-----------------------+--> ARCHIVED
+                                                     (terminal)
 ```
 
+Figure notes (the figure is intentionally non-exhaustive):
+
+- **Normative source: contract section 6.3 (the 41-edge allow-list) and
+  section 6.4 (hard forbiddens). Where this diagram and sections 6.3/6.4
+  disagree in any way, sections 6.3/6.4 win.**
+- `NEW -> ARCHIVED` (left ARCHIVE lane) and `RESOLVED -> ARCHIVED` are drawn
+  and accurate.
+- **`ACTIVE -> ARCHIVED` does not exist and is not drawn** — hard forbidden
+  (section 6.4): running work must be concluded or interrupted first.
+  `MERGE_PENDING -> ARCHIVED` is likewise forbidden; the halt-states box
+  feeds ARCHIVE from every member except MERGE_PENDING.
+- Edges not drawn (all legal, section 6.3): `ACTIVE -> RESOLVED` (CLOSE),
+  `CHECKPOINTED -> RESOLVED` (CLOSE), `CHECKPOINTED -> CHECKPOINTED`
+  (self-edge), halt-state returns to ACTIVE (`UNBLOCK`, `RESUME`, `REOPEN`,
+  `CONFLICT_RESOLVE`).
 - Exactly 10 states; ARCHIVED is the sole terminal state (zero outgoing
   edges); RESOLVED is non-terminal with exactly one outgoing edge
   (`RESOLVED -> ARCHIVED`).
@@ -103,17 +123,24 @@ ignored); tracked artifacts are governance documents only.
    - `checkpoint_id = job:{job_id}:sessions:{session_key}:checkpoint:{seq}`;
      persisted monotonic `checkpoint_seq`; no wall clock, no randomness, no
      LLM-derived identity.
-   - Immutable, append-only; duplicate content is `IDEMPOTENT_REPLAY`;
-     latest valid = maximum seq passing integrity; corrupted maximum fails
-     `CHECKPOINT_INVALID` with no fallback to older.
+   - Immutable, append-only; duplicate content is `IDEMPOTENT_REPLAY`
+     (content-scoped: evaluated at P11 after P9 head-replay and P10
+     legality, before P12; remains idempotent across intervening
+     transitions — contract section 8.4); latest valid = maximum seq
+     passing integrity; corrupted maximum fails `CHECKPOINT_INVALID` with
+     no fallback to older.
    - Consistency: `CHECKPOINTED => store non-empty`; a non-empty store does
      NOT imply CHECKPOINTED (ACTIVE after RESUME may hold checkpoints);
      `NEW => empty store, checkpoint_seq = 0`.
 
 4. Resume / recovery edges
    - Every `->ACTIVE` edge validates the target checkpoint when the store is
-     non-empty; empty stores require recorded cold entry/resume evidence;
-     validation never deletes, mutates, repairs, or replaces checkpoints.
+     non-empty; for re-entry edges (`UNBLOCK`, `RESUME` from INTERRUPTED,
+     `REOPEN`, `CONFLICT_RESOLVE`) an empty store requires recorded cold
+     entry/resume evidence. `START` is exempt: NEW implies an empty store
+     (invariant I2) and the applied START transition record is itself the
+     recorded cold entry (contract sections 6.5-6.6). Validation never
+     deletes, mutates, repairs, or replaces checkpoints.
    - Resume, unblock, re-open, conflict resolution, merge closure, and
      archive are explicit and approval-gated.
 
