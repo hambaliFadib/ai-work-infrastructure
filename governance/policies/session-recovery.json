@@ -5,15 +5,25 @@
   "supersedes": "session-recovery@1.0.0",
   "supersession_reason": "Post-merge governance review corrections: P1 deterministic idempotency precedence for duplicate checkpoint retry (head replay P9 vs content dedup P11), P2a START cold-entry resolution (START exempt; applied START transition record is the recorded cold entry), P2b architecture diagram accuracy. States (10), allow-list (41), canonical errors (8), P1-P13, and acceptance IDs (70) unchanged.",
   "status": "CONTRACT_LOCKED",
-  "implementation_status": "NONE",
+  "implementation_status": "PARTIAL (9C-03)",
   "phase": "9C",
   "epic": 17,
-  "description": "Normative governance contract for Session Recovery v1: 10-state recovery model, 41-edge allow-list transitions, RecoveryObject identity, immutable append-only checkpoint model, approval-gated transitions, canonical fail-closed errors, and the declared Phase 9C acceptance model. Implementation status: NONE - no runtime module exists; acceptance DECLARED, not executed; Phase 9C NOT VERIFIED.",
+  "description": "Normative governance contract for Session Recovery v1: 10-state recovery model, 41-edge allow-list transitions, RecoveryObject identity, immutable append-only checkpoint model, approval-gated transitions, canonical fail-closed errors, and the declared Phase 9C acceptance model. Implementation status: PARTIAL (9C-03) - RecoveryObject and checkpoint core implemented; transition engine, approval/security enforcement, and acceptance closure remain pending; Phase 9C NOT VERIFIED.",
   "core_principle": "NO_SILENT_RECOVERY",
   "recovery_object": {
-    "identity_fields": ["job_id", "session_key"],
+    "identity_fields": [
+      "job_id",
+      "session_key"
+    ],
     "scope": "ONE_PER_CANONICAL_JOB_AND_OPAQUE_SESSION_PAIR",
-    "record_fields": ["job_id", "session_key", "current_state", "transition_seq", "checkpoint_seq", "policy_ref"],
+    "record_fields": [
+      "job_id",
+      "session_key",
+      "current_state",
+      "transition_seq",
+      "checkpoint_seq",
+      "policy_ref"
+    ],
     "unknown_fields": "FAIL_CLOSED",
     "unknown_fields_error": "SESSION_RECOVERY_INVALID",
     "create": {
@@ -24,7 +34,9 @@
     "persisted_policy_ref_compatibility": {
       "mode": "EXACT_CURRENT_POLICY_REF",
       "current_policy_ref": "session-recovery@1.0.1",
-      "superseded_policy_refs": ["session-recovery@1.0.0"],
+      "superseded_policy_refs": [
+        "session-recovery@1.0.0"
+      ],
       "superseded_record_result": "SESSION_RECOVERY_INVALID",
       "superseded_1_0_0_implementation": "NONE",
       "historical_runtime_migration_event": "NONE",
@@ -51,12 +63,27 @@
     },
     "timestamps": "FORBIDDEN"
   },
-  "states": ["NEW", "ACTIVE", "CHECKPOINTED", "BLOCKED", "INTERRUPTED", "FAILED", "CONFLICTED", "MERGE_PENDING", "RESOLVED", "ARCHIVED"],
+  "states": [
+    "NEW",
+    "ACTIVE",
+    "CHECKPOINTED",
+    "BLOCKED",
+    "INTERRUPTED",
+    "FAILED",
+    "CONFLICTED",
+    "MERGE_PENDING",
+    "RESOLVED",
+    "ARCHIVED"
+  ],
   "state_count": 10,
-  "terminal_states": ["ARCHIVED"],
+  "terminal_states": [
+    "ARCHIVED"
+  ],
   "resolved": {
     "terminal": false,
-    "outgoing": ["ARCHIVED"]
+    "outgoing": [
+      "ARCHIVED"
+    ]
   },
   "archived": {
     "terminal": true,
@@ -72,52 +99,230 @@
     "forbidden_error": "ILLEGAL_TRANSITION",
     "into_new": "FORBIDDEN",
     "out_of_archived": "FORBIDDEN",
-    "allowed_self_edges": [["CHECKPOINTED", "CHECKPOINTED"]],
-    "operation_is_pure_function_of": ["from_state", "to_state"],
+    "allowed_self_edges": [
+      [
+        "CHECKPOINTED",
+        "CHECKPOINTED"
+      ]
+    ],
+    "operation_is_pure_function_of": [
+      "from_state",
+      "to_state"
+    ],
     "unknown_operation": "REJECTED",
-    "automatic_transition_sources": ["process_restart", "wall_clock", "reads", "validations", "staleness_heuristics"],
+    "automatic_transition_sources": [
+      "process_restart",
+      "wall_clock",
+      "reads",
+      "validations",
+      "staleness_heuristics"
+    ],
     "transitions": [
-      { "from": "NEW", "to": "ACTIVE", "operation": "START" },
-      { "from": "NEW", "to": "ARCHIVED", "operation": "ARCHIVE" },
-      { "from": "ACTIVE", "to": "CHECKPOINTED", "operation": "CHECKPOINT_CREATE" },
-      { "from": "ACTIVE", "to": "BLOCKED", "operation": "BLOCK_RECORD" },
-      { "from": "ACTIVE", "to": "INTERRUPTED", "operation": "INTERRUPT_RECORD" },
-      { "from": "ACTIVE", "to": "FAILED", "operation": "FAILURE_RECORD" },
-      { "from": "ACTIVE", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
-      { "from": "ACTIVE", "to": "MERGE_PENDING", "operation": "MERGE_ELIGIBLE_RECORD" },
-      { "from": "ACTIVE", "to": "RESOLVED", "operation": "CLOSE" },
-      { "from": "CHECKPOINTED", "to": "ACTIVE", "operation": "RESUME" },
-      { "from": "CHECKPOINTED", "to": "CHECKPOINTED", "operation": "CHECKPOINT_CREATE" },
-      { "from": "CHECKPOINTED", "to": "BLOCKED", "operation": "BLOCK_RECORD" },
-      { "from": "CHECKPOINTED", "to": "INTERRUPTED", "operation": "INTERRUPT_RECORD" },
-      { "from": "CHECKPOINTED", "to": "FAILED", "operation": "FAILURE_RECORD" },
-      { "from": "CHECKPOINTED", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
-      { "from": "CHECKPOINTED", "to": "MERGE_PENDING", "operation": "MERGE_ELIGIBLE_RECORD" },
-      { "from": "CHECKPOINTED", "to": "RESOLVED", "operation": "CLOSE" },
-      { "from": "CHECKPOINTED", "to": "ARCHIVED", "operation": "ARCHIVE" },
-      { "from": "BLOCKED", "to": "ACTIVE", "operation": "UNBLOCK" },
-      { "from": "BLOCKED", "to": "FAILED", "operation": "FAILURE_RECORD" },
-      { "from": "BLOCKED", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
-      { "from": "BLOCKED", "to": "RESOLVED", "operation": "CLOSE" },
-      { "from": "BLOCKED", "to": "ARCHIVED", "operation": "ARCHIVE" },
-      { "from": "INTERRUPTED", "to": "ACTIVE", "operation": "RESUME" },
-      { "from": "INTERRUPTED", "to": "FAILED", "operation": "FAILURE_RECORD" },
-      { "from": "INTERRUPTED", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
-      { "from": "INTERRUPTED", "to": "RESOLVED", "operation": "CLOSE" },
-      { "from": "INTERRUPTED", "to": "ARCHIVED", "operation": "ARCHIVE" },
-      { "from": "FAILED", "to": "ACTIVE", "operation": "REOPEN" },
-      { "from": "FAILED", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
-      { "from": "FAILED", "to": "RESOLVED", "operation": "CLOSE" },
-      { "from": "FAILED", "to": "ARCHIVED", "operation": "ARCHIVE" },
-      { "from": "CONFLICTED", "to": "ACTIVE", "operation": "CONFLICT_RESOLVE" },
-      { "from": "CONFLICTED", "to": "FAILED", "operation": "FAILURE_RECORD" },
-      { "from": "CONFLICTED", "to": "RESOLVED", "operation": "CLOSE" },
-      { "from": "CONFLICTED", "to": "ARCHIVED", "operation": "ARCHIVE" },
-      { "from": "MERGE_PENDING", "to": "RESOLVED", "operation": "INTEGRATE_CLOSE" },
-      { "from": "MERGE_PENDING", "to": "CONFLICTED", "operation": "CONFLICT_RECORD" },
-      { "from": "MERGE_PENDING", "to": "BLOCKED", "operation": "BLOCK_RECORD" },
-      { "from": "MERGE_PENDING", "to": "FAILED", "operation": "FAILURE_RECORD" },
-      { "from": "RESOLVED", "to": "ARCHIVED", "operation": "ARCHIVE" }
+      {
+        "from": "NEW",
+        "to": "ACTIVE",
+        "operation": "START"
+      },
+      {
+        "from": "NEW",
+        "to": "ARCHIVED",
+        "operation": "ARCHIVE"
+      },
+      {
+        "from": "ACTIVE",
+        "to": "CHECKPOINTED",
+        "operation": "CHECKPOINT_CREATE"
+      },
+      {
+        "from": "ACTIVE",
+        "to": "BLOCKED",
+        "operation": "BLOCK_RECORD"
+      },
+      {
+        "from": "ACTIVE",
+        "to": "INTERRUPTED",
+        "operation": "INTERRUPT_RECORD"
+      },
+      {
+        "from": "ACTIVE",
+        "to": "FAILED",
+        "operation": "FAILURE_RECORD"
+      },
+      {
+        "from": "ACTIVE",
+        "to": "CONFLICTED",
+        "operation": "CONFLICT_RECORD"
+      },
+      {
+        "from": "ACTIVE",
+        "to": "MERGE_PENDING",
+        "operation": "MERGE_ELIGIBLE_RECORD"
+      },
+      {
+        "from": "ACTIVE",
+        "to": "RESOLVED",
+        "operation": "CLOSE"
+      },
+      {
+        "from": "CHECKPOINTED",
+        "to": "ACTIVE",
+        "operation": "RESUME"
+      },
+      {
+        "from": "CHECKPOINTED",
+        "to": "CHECKPOINTED",
+        "operation": "CHECKPOINT_CREATE"
+      },
+      {
+        "from": "CHECKPOINTED",
+        "to": "BLOCKED",
+        "operation": "BLOCK_RECORD"
+      },
+      {
+        "from": "CHECKPOINTED",
+        "to": "INTERRUPTED",
+        "operation": "INTERRUPT_RECORD"
+      },
+      {
+        "from": "CHECKPOINTED",
+        "to": "FAILED",
+        "operation": "FAILURE_RECORD"
+      },
+      {
+        "from": "CHECKPOINTED",
+        "to": "CONFLICTED",
+        "operation": "CONFLICT_RECORD"
+      },
+      {
+        "from": "CHECKPOINTED",
+        "to": "MERGE_PENDING",
+        "operation": "MERGE_ELIGIBLE_RECORD"
+      },
+      {
+        "from": "CHECKPOINTED",
+        "to": "RESOLVED",
+        "operation": "CLOSE"
+      },
+      {
+        "from": "CHECKPOINTED",
+        "to": "ARCHIVED",
+        "operation": "ARCHIVE"
+      },
+      {
+        "from": "BLOCKED",
+        "to": "ACTIVE",
+        "operation": "UNBLOCK"
+      },
+      {
+        "from": "BLOCKED",
+        "to": "FAILED",
+        "operation": "FAILURE_RECORD"
+      },
+      {
+        "from": "BLOCKED",
+        "to": "CONFLICTED",
+        "operation": "CONFLICT_RECORD"
+      },
+      {
+        "from": "BLOCKED",
+        "to": "RESOLVED",
+        "operation": "CLOSE"
+      },
+      {
+        "from": "BLOCKED",
+        "to": "ARCHIVED",
+        "operation": "ARCHIVE"
+      },
+      {
+        "from": "INTERRUPTED",
+        "to": "ACTIVE",
+        "operation": "RESUME"
+      },
+      {
+        "from": "INTERRUPTED",
+        "to": "FAILED",
+        "operation": "FAILURE_RECORD"
+      },
+      {
+        "from": "INTERRUPTED",
+        "to": "CONFLICTED",
+        "operation": "CONFLICT_RECORD"
+      },
+      {
+        "from": "INTERRUPTED",
+        "to": "RESOLVED",
+        "operation": "CLOSE"
+      },
+      {
+        "from": "INTERRUPTED",
+        "to": "ARCHIVED",
+        "operation": "ARCHIVE"
+      },
+      {
+        "from": "FAILED",
+        "to": "ACTIVE",
+        "operation": "REOPEN"
+      },
+      {
+        "from": "FAILED",
+        "to": "CONFLICTED",
+        "operation": "CONFLICT_RECORD"
+      },
+      {
+        "from": "FAILED",
+        "to": "RESOLVED",
+        "operation": "CLOSE"
+      },
+      {
+        "from": "FAILED",
+        "to": "ARCHIVED",
+        "operation": "ARCHIVE"
+      },
+      {
+        "from": "CONFLICTED",
+        "to": "ACTIVE",
+        "operation": "CONFLICT_RESOLVE"
+      },
+      {
+        "from": "CONFLICTED",
+        "to": "FAILED",
+        "operation": "FAILURE_RECORD"
+      },
+      {
+        "from": "CONFLICTED",
+        "to": "RESOLVED",
+        "operation": "CLOSE"
+      },
+      {
+        "from": "CONFLICTED",
+        "to": "ARCHIVED",
+        "operation": "ARCHIVE"
+      },
+      {
+        "from": "MERGE_PENDING",
+        "to": "RESOLVED",
+        "operation": "INTEGRATE_CLOSE"
+      },
+      {
+        "from": "MERGE_PENDING",
+        "to": "CONFLICTED",
+        "operation": "CONFLICT_RECORD"
+      },
+      {
+        "from": "MERGE_PENDING",
+        "to": "BLOCKED",
+        "operation": "BLOCK_RECORD"
+      },
+      {
+        "from": "MERGE_PENDING",
+        "to": "FAILED",
+        "operation": "FAILURE_RECORD"
+      },
+      {
+        "from": "RESOLVED",
+        "to": "ARCHIVED",
+        "operation": "ARCHIVE"
+      }
     ],
     "hard_forbidden": [
       "into_NEW",
@@ -145,7 +350,12 @@
       "start_evidence": "APPLIED_START_TRANSITION_RECORD_IS_THE_RECORDED_COLD_ENTRY",
       "start_p11_outcome": "PASS_SINGLE_DETERMINISTIC_OUTCOME",
       "start_recovery_precondition_failed_producible": false,
-      "cold_entry_evidence_required_for": ["UNBLOCK", "RESUME_FROM_INTERRUPTED", "REOPEN", "CONFLICT_RESOLVE"],
+      "cold_entry_evidence_required_for": [
+        "UNBLOCK",
+        "RESUME_FROM_INTERRUPTED",
+        "REOPEN",
+        "CONFLICT_RESOLVE"
+      ],
       "checkpointed_resume_never_cold": true,
       "validation_never_mutates_checkpoints": true
     }
@@ -156,7 +366,14 @@
     "seq_starts_at": 0,
     "seq_increment": 1,
     "deterministic": true,
-    "forbidden_identity_sources": ["wall_clock", "randomness", "probabilistic_memory", "llm_output", "unordered_object_iteration", "machine_specific_path"],
+    "forbidden_identity_sources": [
+      "wall_clock",
+      "randomness",
+      "probabilistic_memory",
+      "llm_output",
+      "unordered_object_iteration",
+      "machine_specific_path"
+    ],
     "uniqueness": "STRUCTURAL_BY_TUPLE",
     "identifier_parsed": false,
     "ordering": "NUMERIC_ON_CHECKPOINT_SEQ",
@@ -204,11 +421,20 @@
     }
   },
   "namespaces": {
-    "allowed_write_roots": ["session_namespace"],
+    "allowed_write_roots": [
+      "session_namespace"
+    ],
     "session_namespace_root_template": "job:{job_id}:sessions",
     "session_subtree_template": "job:{job_id}:sessions:{session_key}",
-    "session_subtree_layout": ["recovery/", "transitions/", "checkpoints/{seq}"],
-    "forbidden_write_roots": ["ledger_namespace", "runtime_state_namespace"],
+    "session_subtree_layout": [
+      "recovery/",
+      "transitions/",
+      "checkpoints/{seq}"
+    ],
+    "forbidden_write_roots": [
+      "ledger_namespace",
+      "runtime_state_namespace"
+    ],
     "ledger_recovery_writes": "FORBIDDEN",
     "ledger_rule": "job-isolation-v1.md section 13: no recovery state transitions in the ledger",
     "phase_9b_boundaries": "PRESERVED_EXACTLY",
@@ -223,44 +449,93 @@
     "profile_drift_error": "PROFILE_BINDING_MISMATCH",
     "session_identity": "OPAQUE_EXACT_MATCH",
     "lane_writer_fields_mutated_by_9c": false,
-    "lane_conflict_errors": ["LANE_OWNERSHIP_CONFLICT", "CROSS_LANE_WRITE_REJECTED"],
+    "lane_conflict_errors": [
+      "LANE_OWNERSHIP_CONFLICT",
+      "CROSS_LANE_WRITE_REJECTED"
+    ],
     "record_identity_immutable_after_create": true
   },
   "approval_model": {
     "all_transitions_gated": true,
     "gated_transition_count": 41,
     "contract_alone_authorizes_execution": false,
-    "approval_system_authoritative": ["approval-gate", "safe-mode"],
-    "recording_operations": ["BLOCK_RECORD", "INTERRUPT_RECORD", "FAILURE_RECORD", "CONFLICT_RECORD"],
+    "approval_system_authoritative": [
+      "approval-gate",
+      "safe-mode"
+    ],
+    "recording_operations": [
+      "BLOCK_RECORD",
+      "INTERRUPT_RECORD",
+      "FAILURE_RECORD",
+      "CONFLICT_RECORD"
+    ],
     "recording_operations_restrict_only": true,
-    "recording_operations_targets": ["BLOCKED", "INTERRUPTED", "FAILED", "CONFLICTED"],
+    "recording_operations_targets": [
+      "BLOCKED",
+      "INTERRUPTED",
+      "FAILED",
+      "CONFLICTED"
+    ],
     "recording_operations_still_gated": true,
     "self_authorizing_recovery": "FORBIDDEN",
     "archive_requires_user_confirmation": true,
     "delete_class_used_by_9c": false,
     "secret_access_used_by_9c": false,
-    "bypass_forbidden": ["approval_gate", "safe_mode", "security_checks", "project_root_boundaries"]
+    "bypass_forbidden": [
+      "approval_gate",
+      "safe_mode",
+      "security_checks",
+      "project_root_boundaries"
+    ]
   },
   "conflict_evidence": {
     "detection_authority": "PHASE_9B",
     "entered_state": "CONFLICTED",
     "entering_operation": "CONFLICT_RECORD",
     "mapping": [
-      { "kind": "branch_divergence", "code": "STALE_MAIN_BASELINE" },
-      { "kind": "namespace_collision", "code": "NAMESPACE_COLLISION" },
-      { "kind": "lane_ownership_collision", "code": "LANE_OWNERSHIP_CONFLICT" },
-      { "kind": "job_identity_collision", "code": "JOB_ID_COLLISION" },
-      { "kind": "foreign_job_write_attempt", "code": "FOREIGN_NAMESPACE_WRITE_REJECTED" },
-      { "kind": "operational_merge_lock_conflict", "code": "MERGE_LOCK_REFERENCE" }
+      {
+        "kind": "branch_divergence",
+        "code": "STALE_MAIN_BASELINE"
+      },
+      {
+        "kind": "namespace_collision",
+        "code": "NAMESPACE_COLLISION"
+      },
+      {
+        "kind": "lane_ownership_collision",
+        "code": "LANE_OWNERSHIP_CONFLICT"
+      },
+      {
+        "kind": "job_identity_collision",
+        "code": "JOB_ID_COLLISION"
+      },
+      {
+        "kind": "foreign_job_write_attempt",
+        "code": "FOREIGN_NAMESPACE_WRITE_REJECTED"
+      },
+      {
+        "kind": "operational_merge_lock_conflict",
+        "code": "MERGE_LOCK_REFERENCE"
+      }
     ],
-    "exits": ["ACTIVE", "FAILED", "RESOLVED", "ARCHIVED"]
+    "exits": [
+      "ACTIVE",
+      "FAILED",
+      "RESOLVED",
+      "ARCHIVED"
+    ]
   },
   "merge_pending": {
     "eligibility_consumed_by_reference": true,
     "eligibility_is_pure_decision": true,
     "eligibility_authorizes_nothing": true,
     "merge_executed_by_9c": false,
-    "integrate_close_requires": ["merge_applied_evidence", "post_merge_verification_evidence", "audited_synchronization_when_stale", "approval"],
+    "integrate_close_requires": [
+      "merge_applied_evidence",
+      "post_merge_verification_evidence",
+      "audited_synchronization_when_stale",
+      "approval"
+    ],
     "stale_baseline_error": "STALE_MAIN_BASELINE",
     "auto_synchronization": "FORBIDDEN",
     "stale_lane_authoritative_main": false,
@@ -285,12 +560,28 @@
     "P13_ATOMIC_APPLY:NO_PARTIAL_EFFECT"
   ],
   "audit": {
-    "transition_record_fields": ["job_id", "session_key", "transition_seq", "from_state", "to_state", "operation", "arg_fingerprint", "evidence_refs", "approval_ref", "policy_ref", "outcome"],
+    "transition_record_fields": [
+      "job_id",
+      "session_key",
+      "transition_seq",
+      "from_state",
+      "to_state",
+      "operation",
+      "arg_fingerprint",
+      "evidence_refs",
+      "approval_ref",
+      "policy_ref",
+      "outcome"
+    ],
     "record_storage": "APPEND_ONLY_TRANSITIONS_SUBTREE",
     "timestamps": "FORBIDDEN",
     "append_only": true,
     "immutable": true,
-    "transition_identity": ["job_id", "session_key", "transition_seq"],
+    "transition_identity": [
+      "job_id",
+      "session_key",
+      "transition_seq"
+    ],
     "operation_fingerprint": "op:sha256(job_id|session_key|from_state|to_state|operation|arg_fingerprint)",
     "arg_fingerprint_inputs": "CANONICAL_ARGUMENT_REFERENCE_FIELDS_ONLY",
     "free_text_identity_input": false,
@@ -334,15 +625,54 @@
   "reused_errors": {
     "phase_9b_locked_count": 18,
     "phase_9b_modified": false,
-    "phase_9b_locked_errors": ["JOB_CONTRACT_INVALID", "INVALID_JOB_ID", "JOB_ID_COLLISION", "PROFILE_BINDING_INVALID", "PROFILE_BINDING_MISMATCH", "NAMESPACE_DERIVATION_FAILED", "NAMESPACE_OVERRIDE_FORBIDDEN", "NAMESPACE_COLLISION", "FOREIGN_JOB_REJECT", "FOREIGN_NAMESPACE_WRITE_REJECTED", "INVALID_KNOWLEDGE_SCOPE", "INVALID_EXECUTION_PERMISSIONS", "LANE_CONTRACT_INVALID", "LANE_ID_COLLISION", "LANE_OWNERSHIP_CONFLICT", "CROSS_LANE_WRITE_REJECTED", "COORDINATION_CHECKOUT_VIOLATION", "STALE_MAIN_BASELINE"],
-    "generic_taxonomy": ["VALIDATION_ERROR", "POLICY_BLOCKED"],
+    "phase_9b_locked_errors": [
+      "JOB_CONTRACT_INVALID",
+      "INVALID_JOB_ID",
+      "JOB_ID_COLLISION",
+      "PROFILE_BINDING_INVALID",
+      "PROFILE_BINDING_MISMATCH",
+      "NAMESPACE_DERIVATION_FAILED",
+      "NAMESPACE_OVERRIDE_FORBIDDEN",
+      "NAMESPACE_COLLISION",
+      "FOREIGN_JOB_REJECT",
+      "FOREIGN_NAMESPACE_WRITE_REJECTED",
+      "INVALID_KNOWLEDGE_SCOPE",
+      "INVALID_EXECUTION_PERMISSIONS",
+      "LANE_CONTRACT_INVALID",
+      "LANE_ID_COLLISION",
+      "LANE_OWNERSHIP_CONFLICT",
+      "CROSS_LANE_WRITE_REJECTED",
+      "COORDINATION_CHECKOUT_VIOLATION",
+      "STALE_MAIN_BASELINE"
+    ],
+    "generic_taxonomy": [
+      "VALIDATION_ERROR",
+      "POLICY_BLOCKED"
+    ],
     "merge_pending_conflict": "NOT_INTRODUCED",
     "idempotent_replay_is_error": false
   },
   "determinism": {
-    "identical_inputs_produce": ["IDENTICAL_TRANSITION_OUTCOME", "IDENTICAL_ERROR_RESULT", "IDENTICAL_ENVELOPE"],
-    "forbidden_identity_sources": ["wall_clock", "randomness_after_persisted_creation", "probabilistic_memory", "llm_output", "unordered_object_iteration", "machine_specific_path"],
-    "fail_closed": ["unknown_state", "unknown_transition", "ambiguous_identity", "absent_or_malformed_record", "missing_or_corrupt_checkpoint"],
+    "identical_inputs_produce": [
+      "IDENTICAL_TRANSITION_OUTCOME",
+      "IDENTICAL_ERROR_RESULT",
+      "IDENTICAL_ENVELOPE"
+    ],
+    "forbidden_identity_sources": [
+      "wall_clock",
+      "randomness_after_persisted_creation",
+      "probabilistic_memory",
+      "llm_output",
+      "unordered_object_iteration",
+      "machine_specific_path"
+    ],
+    "fail_closed": [
+      "unknown_state",
+      "unknown_transition",
+      "ambiguous_identity",
+      "absent_or_malformed_record",
+      "missing_or_corrupt_checkpoint"
+    ],
     "fallback_scope": "NONE",
     "silent_repair": "FORBIDDEN",
     "silent_resume": "FORBIDDEN"
@@ -363,26 +693,116 @@
   "acceptance_model": {
     "total": 70,
     "status": "DECLARED_NOT_EXECUTED",
-    "RC": ["RC01", "RC02", "RC03", "RC04", "RC05", "RC06", "RC07", "RC08"],
-    "ST": ["ST01", "ST02", "ST03", "ST04", "ST05", "ST06", "ST07", "ST08", "ST09", "ST10", "ST11", "ST12"],
-    "CP": ["CP01", "CP02", "CP03", "CP04", "CP05", "CP06", "CP07", "CP08", "CP09", "CP10"],
-    "ID": ["ID01", "ID02", "ID03", "ID04", "ID05", "ID06", "ID07"],
-    "IF": ["IF01", "IF02", "IF03", "IF04", "IF05", "IF06", "IF07"],
-    "MP": ["MP01", "MP02", "MP03", "MP04", "MP05", "MP06", "MP07", "MP08"],
-    "DI": ["DI01", "DI02", "DI03", "DI04", "DI05", "DI06", "DI07", "DI08"],
-    "SB": ["SB01", "SB02", "SB03", "SB04", "SB05", "SB06", "SB07", "SB08", "SB09", "SB10"],
+    "RC": [
+      "RC01",
+      "RC02",
+      "RC03",
+      "RC04",
+      "RC05",
+      "RC06",
+      "RC07",
+      "RC08"
+    ],
+    "ST": [
+      "ST01",
+      "ST02",
+      "ST03",
+      "ST04",
+      "ST05",
+      "ST06",
+      "ST07",
+      "ST08",
+      "ST09",
+      "ST10",
+      "ST11",
+      "ST12"
+    ],
+    "CP": [
+      "CP01",
+      "CP02",
+      "CP03",
+      "CP04",
+      "CP05",
+      "CP06",
+      "CP07",
+      "CP08",
+      "CP09",
+      "CP10"
+    ],
+    "ID": [
+      "ID01",
+      "ID02",
+      "ID03",
+      "ID04",
+      "ID05",
+      "ID06",
+      "ID07"
+    ],
+    "IF": [
+      "IF01",
+      "IF02",
+      "IF03",
+      "IF04",
+      "IF05",
+      "IF06",
+      "IF07"
+    ],
+    "MP": [
+      "MP01",
+      "MP02",
+      "MP03",
+      "MP04",
+      "MP05",
+      "MP06",
+      "MP07",
+      "MP08"
+    ],
+    "DI": [
+      "DI01",
+      "DI02",
+      "DI03",
+      "DI04",
+      "DI05",
+      "DI06",
+      "DI07",
+      "DI08"
+    ],
+    "SB": [
+      "SB01",
+      "SB02",
+      "SB03",
+      "SB04",
+      "SB05",
+      "SB06",
+      "SB07",
+      "SB08",
+      "SB09",
+      "SB10"
+    ],
     "runner_shape": "EXPLICIT_REGISTRY_ALL_REQUIRED_SKIPPED_ZERO_NONZERO_EXIT_ON_FAILURE",
     "note": "Declarations for future 9C-07 execution. Not runtime acceptance executions. No ID is authoritative before contract lock."
   },
   "non_claims": {
     "phase_9c_verified": false,
-    "runtime": "NONE",
+    "runtime": "PARTIAL (9C-03)",
     "architecture_freeze": "NOT_CLAIMED",
     "production_readiness": "NOT_PROVEN",
     "acceptance_executed": false
   },
   "public_artifact_constraints": {
-    "forbidden_content": ["client_data", "pgn_data", "credentials", "secret_profiles", "runtime_auth_state", "private_personal_memory", "opencode_db", "browser_profiles", "machine_specific_evidence", "machine_specific_runtime_databases", "machine_specific_absolute_paths"],
+    "forbidden_content": [
+      "client_data",
+      "pgn_data",
+      "credentials",
+      "secret_profiles",
+      "runtime_auth_state",
+      "private_personal_memory",
+      "opencode_db",
+      "browser_profiles",
+      "machine_specific_evidence",
+      "machine_specific_runtime_databases",
+      "machine_specific_absolute_paths"
+    ],
     "recovery_state_storage": "LOCAL_ONLY_STATE_SESSIONS_IGNORED",
     "tracked_artifacts": "CONTRACT_POLICY_ARCHITECTURE_ADRS_FUTURE_TESTS_ONLY"
   }
