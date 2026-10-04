@@ -10,23 +10,21 @@
 
 const crypto = require('crypto');
 
-// --- Constants ---
-
-const CANONICAL_STATES = [
+const CANONICAL_STATES = Object.freeze([
   'NEW', 'ACTIVE', 'CHECKPOINTED', 'BLOCKED', 'INTERRUPTED',
   'FAILED', 'CONFLICTED', 'MERGE_PENDING', 'RESOLVED', 'ARCHIVED'
-];
+]);
 
-const CANONICAL_RECORD_FIELDS = ['job_id', 'session_key', 'current_state', 'transition_seq', 'checkpoint_seq', 'policy_ref'];
+const CANONICAL_RECORD_FIELDS = Object.freeze([
+  'job_id', 'session_key', 'current_state',
+  'transition_seq', 'checkpoint_seq', 'policy_ref'
+]);
 
 const CURRENT_POLICY_REF = 'session-recovery@1.0.1';
-
 const SUPERSEDED_POLICY_REFS = new Set(['session-recovery@1.0.0']);
-
 const JOB_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
-// Deterministic error identifiers
-const ERR = {
+const ERR = Object.freeze({
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   SESSION_RECOVERY_INVALID: 'SESSION_RECOVERY_INVALID',
   INVALID_RECOVERY_STATE: 'INVALID_RECOVERY_STATE',
@@ -35,131 +33,216 @@ const ERR = {
   CHECKPOINT_INVALID: 'CHECKPOINT_INVALID',
   CHECKPOINT_OWNERSHIP_MISMATCH: 'CHECKPOINT_OWNERSHIP_MISMATCH',
   IDEMPOTENT_REPLAY: 'IDEMPOTENT_REPLAY'
-};
+});
 
-// --- Canonical helpers ---
-
-/** Normalize a raw job_id by Phase 9B canonicalization rules. */
-function normalizeJobId(raw) {
-  if (typeof raw !== 'string') throw makeError(ERR.VALIDATION_ERROR, 'job_id must be a string');
-  const nfc = raw.normalize('NFKC').trim().toLowerCase();
-  if (!nfc || nfc.length > 64) throw makeError(ERR.VALIDATION_ERROR, 'job_id must be 1-64 chars after normalization');
-  if (!JOB_ID_PATTERN.test(nfc)) throw makeError(ERR.VALIDATION_ERROR, 'job_id must match ^[a-z0-9][a-z0-9._-]{0,63}$');
-  return nfc;
+function makeError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
 }
 
-/** Validate raw session_key without parsing or deriving anything. */
+function normalizeJobId(raw) {
+  if (typeof raw !== 'string') {
+    throw makeError(ERR.VALIDATION_ERROR, 'job_id must be a string');
+  }
+  const canonical = raw.normalize('NFKC').trim().toLowerCase();
+  if (!canonical || canonical.length > 64) {
+    throw makeError(ERR.VALIDATION_ERROR, 'job_id must be 1-64 chars after normalization');
+  }
+  if (!JOB_ID_PATTERN.test(canonical)) {
+    throw makeError(ERR.VALIDATION_ERROR, 'job_id must match ^[a-z0-9][a-z0-9._-]{0,63}$');
+  }
+  return canonical;
+}
+
+function isCanonicalJobId(value) {
+  if (typeof value !== 'string') return false;
+  return value === value.normalize('NFKC').trim().toLowerCase()
+    && JOB_ID_PATTERN.test(value);
+}
+
 function validateSessionKey(raw) {
-  if (typeof raw !== 'string') throw makeError(ERR.VALIDATION_ERROR, 'session_key must be a string');
-  // Opaque canonical: reject empty, otherwise pass as-is (exact string only).
-  if (raw.length === 0) throw makeError(ERR.VALIDATION_ERROR, 'session_key must be non-empty');
+  if (typeof raw !== 'string') {
+    throw makeError(ERR.VALIDATION_ERROR, 'session_key must be a string');
+  }
+  if (raw.length === 0) {
+    throw makeError(ERR.VALIDATION_ERROR, 'session_key must be non-empty');
+  }
   return raw;
 }
 
-/** Derive the canonical pair hash used as unique identifier key. */
 function derivePairKey(jobId, sessionKey) {
   return `${jobId}:${sessionKey}`;
 }
 
-// --- Factory ---
+function isPlainDataRecord(record) {
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(record);
+  return proto === Object.prototype || proto === null;
+}
 
-/** Build a new RecoveryObject in state NEW with seqs at zero. */
+function getCanonicalDescriptors(record) {
+  if (!isPlainDataRecord(record)) {
+    return { ok: false, errors: [{
+      message: 'Record must be a plain data record',
+      code: ERR.SESSION_RECOVERY_INVALID
+    }] };
+  }
+
+  const keys = Reflect.ownKeys(record);
+  if (keys.length !== CANONICAL_RECORD_FIELDS.length) {
+    return { ok: false, errors: [{
+      message: 'Record must contain exactly six canonical fields',
+      code: ERR.SESSION_RECOVERY_INVALID
+    }] };
+  }
+
+  for (const key of keys) {
+    if (typeof key !== 'string' || !CANONICAL_RECORD_FIELDS.includes(key)) {
+      return { ok: false, errors: [{
+        message: `Unknown fields are not permitted: ${String(key)}`,
+        code: ERR.SESSION_RECOVERY_INVALID
+      }] };
+    }
+  }
+
+  const values = {};
+  for (const field of CANONICAL_RECORD_FIELDS) {
+    const descriptor = Object.getOwnPropertyDescriptor(record, field);
+    if (!descriptor) {
+      return { ok: false, errors: [{
+        message: `Missing field: ${field}`,
+        code: ERR.SESSION_RECOVERY_INVALID
+      }] };
+    }
+    if (descriptor.get !== undefined || descriptor.set !== undefined) {
+      return { ok: false, errors: [{
+        message: `Accessor-backed field is not permitted: ${field}`,
+        code: ERR.SESSION_RECOVERY_INVALID
+      }] };
+    }
+    values[field] = descriptor.value;
+  }
+  return { ok: true, values };
+}
+
 function newRecoveryObject(canonicalJobId, canonicalSessionKey) {
-  return {
+  return Object.freeze({
     job_id: canonicalJobId,
     session_key: canonicalSessionKey,
     current_state: 'NEW',
     transition_seq: 0,
     checkpoint_seq: 0,
     policy_ref: CURRENT_POLICY_REF
-  };
+  });
 }
 
-// --- Validation ---
-
-/** Validate a record's structure strictly. Returns null or {errors:string[]}. */
 function validateRecord(record) {
-  if (!record || typeof record !== 'object') {
-    return [{ message: 'Record must be a non-null object', code: ERR.VALIDATION_ERROR }];
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+    return [{
+      message: 'Record must be a non-null plain object',
+      code: ERR.VALIDATION_ERROR
+    }];
   }
 
-  // Unknown fields -> FAIL CLOSED
-  const extraKeys = Object.keys(record).filter(k => !CANONICAL_RECORD_FIELDS.includes(k));
-  if (extraKeys.length > 0) {
-    return [{ message: `Unknown fields: ${extraKeys.join(',')}`, code: ERR.SESSION_RECOVERY_INVALID }];
-  }
+  const structural = getCanonicalDescriptors(record);
+  if (!structural.ok) return structural.errors;
+  const values = structural.values;
 
-  // Missing fields -> FAIL CLOSED
-  const missingFields = [];
-  for (const field of CANONICAL_RECORD_FIELDS) {
-    if (!(field in record) || record[field] === undefined) {
-      missingFields.push(field);
-    }
-  }
-  if (missingFields.length > 0) {
-    return [{ message: `Missing fields: ${missingFields.join(',')}`, code: ERR.SESSION_RECOVERY_INVALID }];
-  }
-
-  // Type checks
   const errors = [];
-  if (typeof record.job_id !== 'string') errors.push({ message: 'job_id must be string', code: ERR.SESSION_RECOVERY_INVALID });
-  if (typeof record.session_key !== 'string') errors.push({ message: 'session_key must be string', code: ERR.SESSION_RECOVERY_INVALID });
-  if (!Array.isArray(CANONICAL_STATES) || !CANONICAL_STATES.includes(record.current_state)) {
-    if (record.current_state && typeof record.current_state === 'string') {
-      errors.push({ message: `Invalid current_state: ${record.current_state}`, code: ERR.INVALID_RECOVERY_STATE });
+
+  if (!isCanonicalJobId(values.job_id)) {
+    errors.push({
+      message: 'job_id is not already canonical',
+      code: ERR.SESSION_RECOVERY_INVALID
+    });
+  }
+
+  if (typeof values.session_key !== 'string' || values.session_key.length === 0) {
+    errors.push({
+      message: 'session_key must be a non-empty string',
+      code: ERR.SESSION_RECOVERY_INVALID
+    });
+  }
+
+  if (typeof values.current_state !== 'string' || !CANONICAL_STATES.includes(values.current_state)) {
+    if (typeof values.current_state === 'string' && values.current_state.length > 0) {
+      errors.push({
+        message: `Invalid current_state: ${values.current_state}`,
+        code: ERR.INVALID_RECOVERY_STATE
+      });
     } else {
-      errors.push({ message: 'current_state must be a string', code: ERR.SESSION_RECOVERY_INVALID });
+      errors.push({
+        message: 'current_state must be a canonical state string',
+        code: ERR.SESSION_RECOVERY_INVALID
+      });
     }
   }
-  if (!Number.isInteger(record.transition_seq) || record.transition_seq < 0) errors.push({ message: 'transition_seq must be a non-negative integer', code: ERR.SESSION_RECOVERY_INVALID });
-  if (!Number.isInteger(record.checkpoint_seq) || record.checkpoint_seq < 0) errors.push({ message: 'checkpoint_seq must be a non-negative integer', code: ERR.SESSION_RECOVERY_INVALID });
-  if (typeof record.policy_ref !== 'string') errors.push({ message: 'policy_ref must be string', code: ERR.SESSION_RECOVERY_INVALID });
 
-  // policy_ref compatibility check (section 4.3)
-  const ref = record.policy_ref;
-  if (SUPERSEDED_POLICY_REFS.has(ref)) {
-    return [{ message: 'Superseded policy_ref not compatible with current policy', code: ERR.SESSION_RECOVERY_INVALID }];
+  if (!Number.isInteger(values.transition_seq) || values.transition_seq < 0) {
+    errors.push({
+      message: 'transition_seq must be a non-negative integer',
+      code: ERR.SESSION_RECOVERY_INVALID
+    });
   }
-  if (ref !== CURRENT_POLICY_REF) {
-    return [{ message: `policy_ref mismatch (got '${ref}', expected '${CURRENT_POLICY_REF}')`, code: ERR.SESSION_RECOVERY_INVALID }];
+
+  if (!Number.isInteger(values.checkpoint_seq) || values.checkpoint_seq < 0) {
+    errors.push({
+      message: 'checkpoint_seq must be a non-negative integer',
+      code: ERR.SESSION_RECOVERY_INVALID
+    });
+  }
+
+  if (typeof values.policy_ref !== 'string' || values.policy_ref !== CURRENT_POLICY_REF) {
+    errors.push({
+      message: `policy_ref mismatch (got '${values.policy_ref}', expected '${CURRENT_POLICY_REF}')`,
+      code: ERR.SESSION_RECOVERY_INVALID
+    });
   }
 
   return errors.length > 0 ? errors : null;
 }
 
-/** Check if two RecoveryObjects share the same identity (job_id + session_key). */
 function identitiesMatch(a, b) {
-  return a.job_id === b.job_id && a.session_key === b.session_key;
+  return Boolean(a && b && a.job_id === b.job_id && a.session_key === b.session_key);
 }
 
-/** Tamper-detect: verify record identity fields are valid and self-consistent. */
-function tamperCheck(record) {
-  if (!record || typeof record !== 'object') {
-    return { ok: false, error: 'Record must be a non-null object', code: ERR.SESSION_RECOVERY_INVALID };
+function tamperCheck(record, expectedJobId, expectedSessionKey) {
+  const errors = validateRecord(record);
+  if (errors) {
+    const first = errors[0];
+    return { ok: false, error: first.message, code: first.code };
   }
-  if (typeof record.job_id !== 'string' || record.job_id.length === 0) {
-    return { ok: false, error: 'Record job_id is invalid', code: ERR.SESSION_RECOVERY_INVALID };
+
+  if (expectedJobId !== undefined || expectedSessionKey !== undefined) {
+    let canonicalExpectedJobId;
+    try {
+      canonicalExpectedJobId = normalizeJobId(expectedJobId);
+    } catch (_) {
+      return {
+        ok: false,
+        error: 'Expected job identity is invalid',
+        code: ERR.RECOVERY_IDENTITY_MISMATCH
+      };
+    }
+
+    if (record.job_id !== canonicalExpectedJobId || record.session_key !== expectedSessionKey) {
+      return {
+        ok: false,
+        error: 'Persisted identity does not match the expected recovery object identity',
+        code: ERR.RECOVERY_IDENTITY_MISMATCH
+      };
+    }
   }
-  if (typeof record.session_key !== 'string' || record.session_key.length === 0) {
-    return { ok: false, error: 'Record session_key is invalid', code: ERR.SESSION_RECOVERY_INVALID };
-  }
+
   return { ok: true };
 }
 
-// --- Idempotency ---
-
-/** Deterministic hash used for idempotency verification. */
 function deterministicHash() {
   const parts = Array.from(arguments).map(String).join('|');
   return crypto.createHash('sha256').update(parts, 'utf8').digest('hex');
-}
-
-// --- Error constructor ---
-
-function makeError(code, message) {
-  const err = new Error(message);
-  err.code = code;
-  return err;
 }
 
 module.exports = {
@@ -169,6 +252,7 @@ module.exports = {
   SUPERSEDED_POLICY_REFS,
   ERR,
   normalizeJobId,
+  isCanonicalJobId,
   validateSessionKey,
   derivePairKey,
   newRecoveryObject,

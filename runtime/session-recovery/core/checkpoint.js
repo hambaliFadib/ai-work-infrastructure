@@ -18,7 +18,6 @@ const ERR = {
   IDEMPOTENT_REPLAY: 'IDEMPOTENT_REPLAY'
 };
 
-/** Generate a deterministic checkpoint_id from canonical inputs. */
 function deriveCheckpointId(jobId, sessionKey, checkpointSeq) {
   assert.strictEqual(typeof jobId, 'string');
   assert.strictEqual(typeof sessionKey, 'string');
@@ -26,11 +25,12 @@ function deriveCheckpointId(jobId, sessionKey, checkpointSeq) {
   return `job:${jobId}:sessions:${sessionKey}:checkpoint:${checkpointSeq}`;
 }
 
-/** Create a new checkpoint entry. No timestamps, no randomness. */
 function createCheckpoint(jobId, sessionKey, checkpointSeq, payload) {
   assert(Number.isInteger(checkpointSeq) && checkpointSeq >= 1);
   const checkpointId = deriveCheckpointId(jobId, sessionKey, checkpointSeq);
-  const payloadDigest = crypto.createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex');
+  const payloadDigest = crypto.createHash('sha256')
+    .update(JSON.stringify(payload), 'utf8')
+    .digest('hex');
   return {
     checkpoint_id: checkpointId,
     checkpoint_seq: checkpointSeq,
@@ -41,76 +41,91 @@ function createCheckpoint(jobId, sessionKey, checkpointSeq, payload) {
   };
 }
 
-/** Resolve the latest valid checkpoint from a list. Fails if none. */
-function resolveLatestValid(checkpoints) {
-  if (!checkpoints || checkpoints.length === 0) {
-    return { error: 'No checkpoints available', code: ERR.CHECKPOINT_INVALID };
-  }
-  // Validated checkpoints sorted descending by seq; first valid is latest valid.
-  const valid = checkpoints.filter(c => c && Number.isInteger(c.checkpoint_seq) && c.payload_digest && c.payload_digest.length > 0);
-  if (valid.length === 0) {
-    return { error: 'All checkpoints corrupt', code: ERR.CHECKPOINT_INVALID };
-  }
-  valid.sort((a, b) => b.checkpoint_seq - a.checkpoint_seq);
-  return { ok: true, checkpoint: valid[0] };
+function isIntegrityValid(checkpoint) {
+  return Boolean(
+    checkpoint &&
+    Number.isInteger(checkpoint.checkpoint_seq) &&
+    checkpoint.checkpoint_seq >= 1 &&
+    typeof checkpoint.payload_digest === 'string' &&
+    checkpoint.payload_digest.length > 0
+  );
 }
 
 /**
- * Find the maximum-seq checkpoint and verify its integrity.
- * Corrupted max => CHECKPOINT_INVALID, never fallback to older.
+ * Identify the maximum checkpoint_seq FIRST, then validate only that entry.
+ * A corrupt maximum fails closed. No older checkpoint is ever selected.
  */
-function verifyMaxSequenced(checkpoints) {
-  if (!checkpoints || checkpoints.length === 0) {
-    return { error: 'No checkpoints available', code: ERR.CHECKPOINT_INVALID };
+function resolveLatestValid(checkpoints) {
+  if (!Array.isArray(checkpoints) || checkpoints.length === 0) {
+    return { ok: false, error: 'No checkpoints available', code: ERR.CHECKPOINT_INVALID };
   }
-  const maxItem = [...checkpoints].sort((a, b) => b.checkpoint_seq - a.checkpoint_seq)[0];
-  if (!maxItem || !maxItem.payload_digest || maxItem.payload_digest.length === 0) {
-    return { error: `Max-sequence checkpoint (${maxItem.checkpoint_seq}) invalid`, code: ERR.CHECKPOINT_INVALID };
+
+  const ordered = checkpoints.slice().sort((a, b) => {
+    const aSeq = Number.isInteger(a && a.checkpoint_seq) ? a.checkpoint_seq : -Infinity;
+    const bSeq = Number.isInteger(b && b.checkpoint_seq) ? b.checkpoint_seq : -Infinity;
+    return bSeq - aSeq;
+  });
+
+  const maxItem = ordered[0];
+  if (!isIntegrityValid(maxItem)) {
+    return {
+      ok: false,
+      error: `Max-sequence checkpoint (${maxItem && maxItem.checkpoint_seq}) invalid`,
+      code: ERR.CHECKPOINT_INVALID
+    };
   }
+
   return { ok: true, checkpoint: maxItem };
 }
 
-/**
- * Deduplicate checkpoint content. Scanned by payload_digest among same-pair records.
- * Returns IDEMPOTENT_REPLAY if duplicate found, or null if unique.
- */
+function verifyMaxSequenced(checkpoints) {
+  return resolveLatestValid(checkpoints);
+}
+
 function checkDuplicateContent(newPayloadDigest, existingCheckpoints) {
-  if (!newPayloadDigest || typeof newPayloadDigest !== 'string') {
-    return null; // cannot dedup without digest
+  if (!newPayloadDigest || typeof newPayloadDigest !== 'string' || !Array.isArray(existingCheckpoints)) {
+    return null;
   }
   for (const cp of existingCheckpoints) {
-    if (cp.payload_digest === newPayloadDigest) {
-      const id = cp.checkpoint_id || `unknown-${cp.checkpoint_seq}`;
-      return { result: ERR.IDEMPOTENT_REPLAY, existing_checkpoint_id: id, consumed_seq: false };
+    if (cp && cp.payload_digest === newPayloadDigest) {
+      return {
+        result: ERR.IDEMPOTENT_REPLAY,
+        existing_checkpoint_id: cp.checkpoint_id || `unknown-${cp.checkpoint_seq}`,
+        consumed_seq: false
+      };
     }
   }
   return null;
 }
 
-/** Verify checkpoint ownership against job and session keys. Returns FOREIGN_JOB_REJECT for foreign jobs, CHECKPOINT_OWNERSHIP_MISMATCH for same-job foreign sessions. */
 function verifyOwnership(checkpoint, job_id, session_key) {
-  if (checkpoint.job_id !== job_id) {
+  if (!checkpoint || checkpoint.job_id !== job_id) {
     return { error: 'Foreign job access', code: 'FOREIGN_JOB_REJECT' };
   }
   if (checkpoint.session_key !== session_key) {
-    return { error: `Checkpoint belongs to different session: ${checkpoint.session_key}`, code: ERR.CHECKPOINT_OWNERSHIP_MISMATCH };
+    return {
+      error: `Checkpoint belongs to different session: ${checkpoint.session_key}`,
+      code: ERR.CHECKPOINT_OWNERSHIP_MISMATCH
+    };
   }
   return { ok: true };
 }
 
-/**
- * Validate a checkpoint reference exists within the store and belongs to owner.
- * Returns { ok:true, checkpoint } or { error, code }.
- */
 function findCheckpointById(store, checkpointId, job_id, session_key) {
+  if (!Array.isArray(store)) {
+    return { error: 'Store must be an array', code: ERR.CHECKPOINT_INVALID };
+  }
   for (const cp of store) {
-    if (cp.checkpoint_id === checkpointId) {
+    if (cp && cp.checkpoint_id === checkpointId) {
       const ownership = verifyOwnership(cp, job_id, session_key);
       if (ownership.ok) return { ok: true, checkpoint: cp };
       return ownership;
     }
   }
-  return { error: `Checkpoint not found: ${checkpointId}`, code: ERR.CHECKPOINT_INVALID };
+  return {
+    error: `Checkpoint not found: ${checkpointId}`,
+    code: ERR.CHECKPOINT_INVALID
+  };
 }
 
 module.exports = {

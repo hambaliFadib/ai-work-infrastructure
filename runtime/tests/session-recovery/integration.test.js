@@ -1,5 +1,5 @@
 /**
- * Session Recovery v1 — Integration Test (SRCI01–SRCI32)
+ * Session Recovery v1 — Integration Test (SRCI01–SRCI50)
  *
  * Tests the runtime core modules: RecoveryObject + Checkpoint facade.
  * Validates deterministic create, idempotency, policy_ref enforcement,
@@ -80,17 +80,14 @@ test('05', () => {
 
 // SRCI06 — Immutable identity/tamper rejection
 test('06', () => {
-  // Valid record passes tamper check
   const valid = { job_id:'j1', session_key:'s1', current_state:'NEW',
     transition_seq:0, checkpoint_seq:0, policy_ref:'session-recovery@1.0.1' };
-  const tValid = MOD.tamperCheck(valid);
-  assert.ok(tValid.ok, 'valid record must pass tamper check');
+  const tValid = MOD.tamperCheck(valid, 'j1', 's1');
+  assert.ok(tValid.ok, 'valid expected identity must pass tamper check');
 
-  // Tampered identity (empty job_id) must fail
-  const tampered = { job_id:'', session_key:'s1', current_state:'NEW',
-    transition_seq:0, checkpoint_seq:0, policy_ref:'session-recovery@1.0.1' };
-  const tBad = MOD.tamperCheck(tampered);
-  assert.ok(!tBad.ok, 'empty job_id must fail');
+  const tBad = MOD.tamperCheck(valid, 'other-job', 's1');
+  assert.ok(!tBad.ok, 'identity mismatch must fail closed');
+  assert.strictEqual(tBad.code, 'RECOVERY_IDENTITY_MISMATCH');
 });
 
 // SRCI07 — Policy ref 1.0.1 enforced
@@ -243,17 +240,17 @@ test('20', () => {
   assert.strictEqual(res.code, 'CHECKPOINT_INVALID');
 });
 
-// SRCI21 — Valid full store after multiple corruptions still finds latest valid
+// SRCI21 — Corrupt maximum checkpoint never falls back
 test('21', () => {
   const store = [
     { checkpoint_id:'a', checkpoint_seq:1, payload_digest:'valid-a' },
     { checkpoint_id:'b', checkpoint_seq:2, payload_digest:'valid-b' },
-    { checkpoint_id:'c', checkpoint_seq:3, payload_digest:'' } // corrupt
+    { checkpoint_id:'c', checkpoint_seq:3, payload_digest:'' } // corrupt max
   ];
   const res = MOD.resolveLatestValid(store);
-  assert(res.ok, 'should find valid checkpoints');
-  assert.strictEqual(res.checkpoint.checkpoint_id, 'b');
-  assert.strictEqual(res.checkpoint.checkpoint_seq, 2);
+  assert.ok(!res.ok, 'corrupt maximum must fail closed');
+  assert.strictEqual(res.code, 'CHECKPOINT_INVALID');
+  assert.strictEqual(res.checkpoint, undefined, 'older checkpoint must never be returned');
 });
 
 // SRCI22 — Find checkpoint by id with ownership verification
@@ -283,11 +280,13 @@ test('23', () => {
 test('24', () => {
   const rec = { job_id:'j1', session_key:'s1', current_state:'NEW',
     transition_seq:0, checkpoint_seq:0, policy_ref:'session-recovery@1.0.1' };
-  // No idempotent_hash — should still pass (identity fields are valid)
-  const t = MOD.tamperCheck(rec);
-  assert.ok(t.ok, 'valid record without hash must pass tamperCheck');
+  const t = MOD.tamperCheck(rec, 'j1', 's1');
+  assert.ok(t.ok, 'matching identity must pass tamperCheck');
 
-  // Null record must fail
+  const tMismatch = MOD.tamperCheck(rec, 'j2', 's1');
+  assert.ok(!tMismatch.ok, 'mismatched identity must fail');
+  assert.strictEqual(tMismatch.code, 'RECOVERY_IDENTITY_MISMATCH');
+
   const tNull = MOD.tamperCheck(null);
   assert.ok(!tNull.ok, 'null record must fail');
 });
@@ -469,6 +468,137 @@ test('40', () => {
   assert(result.ok);
   assert.strictEqual(result.record.job_id, 'ns-job');
   assert.strictEqual(result.record.session_key, 'ns-sess');
+});
+
+
+// SRCI41 — Non-enumerable unknown field -> SESSION_RECOVERY_INVALID
+test('41', () => {
+  const rec = {
+    job_id:'j1', session_key:'s1', current_state:'NEW',
+    transition_seq:0, checkpoint_seq:0, policy_ref:'session-recovery@1.0.1'
+  };
+  Object.defineProperty(rec, '_hidden', { value: true, enumerable: false });
+  const err = MOD.validateRecord(rec);
+  assert(err);
+  assert.strictEqual(err[0].code, 'SESSION_RECOVERY_INVALID');
+});
+
+// SRCI42 — Symbol-keyed unknown field -> SESSION_RECOVERY_INVALID
+test('42', () => {
+  const rec = {
+    job_id:'j1', session_key:'s1', current_state:'NEW',
+    transition_seq:0, checkpoint_seq:0, policy_ref:'session-recovery@1.0.1'
+  };
+  rec[Symbol('extra')] = true;
+  const err = MOD.validateRecord(rec);
+  assert(err);
+  assert.strictEqual(err[0].code, 'SESSION_RECOVERY_INVALID');
+});
+
+// SRCI43 — Inherited required field is rejected
+test('43', () => {
+  const proto = { policy_ref: 'session-recovery@1.0.1' };
+  const rec = Object.create(proto);
+  rec.job_id = 'j1';
+  rec.session_key = 's1';
+  rec.current_state = 'NEW';
+  rec.transition_seq = 0;
+  rec.checkpoint_seq = 0;
+  const err = MOD.validateRecord(rec);
+  assert(err);
+  assert.strictEqual(err[0].code, 'SESSION_RECOVERY_INVALID');
+});
+
+// SRCI44 — Accessor-backed field rejected without invoking getter
+test('44', () => {
+  let getterCalled = false;
+  const rec = {
+    job_id:'j1', session_key:'s1', current_state:'NEW',
+    transition_seq:0, checkpoint_seq:0, policy_ref:'session-recovery@1.0.1'
+  };
+  Object.defineProperty(rec, 'policy_ref', {
+    get() {
+      getterCalled = true;
+      return 'session-recovery@1.0.1';
+    },
+    configurable: true
+  });
+  const err = MOD.validateRecord(rec);
+  assert(err);
+  assert.strictEqual(err[0].code, 'SESSION_RECOVERY_INVALID');
+  assert.strictEqual(getterCalled, false);
+});
+
+// SRCI45 — Custom prototype is rejected
+test('45', () => {
+  const rec = {
+    job_id:'j1', session_key:'s1', current_state:'NEW',
+    transition_seq:0, checkpoint_seq:0, policy_ref:'session-recovery@1.0.1'
+  };
+  Object.setPrototypeOf(rec, { marker: true });
+  const err = MOD.validateRecord(rec);
+  assert(err);
+  assert.strictEqual(err[0].code, 'SESSION_RECOVERY_INVALID');
+});
+
+// SRCI46 — Non-canonical persisted job_id is rejected
+test('46', () => {
+  const rec = {
+    job_id:'J1', session_key:'s1', current_state:'NEW',
+    transition_seq:0, checkpoint_seq:0, policy_ref:'session-recovery@1.0.1'
+  };
+  const err = MOD.validateRecord(rec);
+  assert(err);
+  assert.strictEqual(err[0].code, 'SESSION_RECOVERY_INVALID');
+});
+
+// SRCI47 — RecoveryObject is immutable after creation
+test('47', () => {
+  const result = MOD.createSession(null, 'immutable-job', 'immutable-session');
+  assert(result.ok);
+  assert.ok(Object.isFrozen(result.record));
+  assert.throws(() => {
+    Object.defineProperty(result.record, 'job_id', { value: 'other-job' });
+  }, TypeError);
+  assert.strictEqual(result.record.job_id, 'immutable-job');
+  assert.strictEqual(result.record.session_key, 'immutable-session');
+});
+
+// SRCI48 — Identity tamper is detected against expected pair
+test('48', () => {
+  const rec = {
+    job_id:'j1', session_key:'s1', current_state:'NEW',
+    transition_seq:0, checkpoint_seq:0, policy_ref:'session-recovery@1.0.1'
+  };
+  const result = MOD.tamperCheck(rec, 'j2', 's1');
+  assert.ok(!result.ok);
+  assert.strictEqual(result.code, 'RECOVERY_IDENTITY_MISMATCH');
+});
+
+// SRCI49 — Existing valid behavior remains green
+test('49', () => {
+  const store = [];
+  const result = MOD.createSession(store, 'green-job', 'green-session');
+  assert.strictEqual(result.action, 'CREATED');
+  assert.strictEqual(MOD.validatePersisted(result.record), null);
+  assert.strictEqual(store.length, 1);
+  const reuse = MOD.createSession(store, 'green-job', 'green-session');
+  assert.strictEqual(reuse.action, 'IDEMPOTENT_REUSE');
+  assert.deepStrictEqual(reuse.record, result.record);
+});
+
+// SRCI50 — Forbidden nondeterministic source scan remains green
+test('50', () => {
+  const files = fs.readdirSync(CORE_DIR).filter(f => f.endsWith('.js'));
+  const src = files.map(f => fs.readFileSync(path.join(CORE_DIR, f), 'utf8')).join('\n');
+  const forbidden = [
+    /Date\.now/, /new\s+Date/, /Math\.random/,
+    /crypto\.(randomBytes|pseudoRandomBytes)/,
+    /process\.env/, /fetch\s*\(/, /XMLHttpRequest/,
+    /https?:\/\//
+  ];
+  const violations = forbidden.filter(re => re.test(src));
+  assert.strictEqual(violations.length, 0, 'forbidden patterns found: ' + violations.map(String).join(', '));
 });
 
 // --- Summary ---

@@ -64,7 +64,7 @@ function createSession(store, rawJobId, rawSessionKey) {
       for (const existing of store) {
         if (identitiesMatch(existing, { job_id: jobId, session_key: sessionKey })) {
           // Verify the existing record is still valid
-          const tamper = tamperCheck(existing);
+          const tamper = tamperCheck(existing, jobId, sessionKey);
           if (!tamper.ok) return { ok: false, error: tamper.error, code: tamper.code };
           const validationErrors = validateRecord(existing);
           if (validationErrors) {
